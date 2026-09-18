@@ -40,7 +40,10 @@ enum class ResourceKind(
     CONNECTOR_RULES("Connector Rules", "connector rule", "/connector-rules/v1", editable = true, pageSize = 50, deletable = true),
     IDENTITIES("Identities", "identity", "/search/v1/identities", editable = false),
     /** Shown as the account schema under Accounts and as each entitlement type's schema under Entitlements. */
-    SOURCE_SCHEMAS("Schemas", "schema", "/sources/v1/{parentId}/schemas", editable = true, parent = SOURCES, hidden = true),
+    /** Only entitlement types' schemas may be deleted; every source needs its account schema. */
+    SOURCE_SCHEMAS(
+        "Schemas", "schema", "/sources/v1/{parentId}/schemas", editable = true, parent = SOURCES, hidden = true, deletable = true,
+    ),
     SOURCE_CORRELATION(
         "Correlation", "correlation config", "/sources/v1/{parentId}/correlation-config",
         editable = true, parent = SOURCES, singleton = true, group = ACCOUNTS,
