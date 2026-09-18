@@ -1,0 +1,1506 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sailpoint.com/schemas/isc-transform.json",
+  "title": "SailPoint ISC Transform",
+  "definitions": {
+    "transform": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Transform ID. Ignored on push."
+        },
+        "name": {
+          "type": "string",
+          "description": "Unique transform name. Required at the top level; cannot be changed after creation."
+        },
+        "type": {
+          "description": "Transform type. Cannot be changed after creation.",
+          "enum": [
+            "accountAttribute",
+            "base64Decode",
+            "base64Encode",
+            "concat",
+            "conditional",
+            "dateCompare",
+            "dateFormat",
+            "dateMath",
+            "decomposeDiacriticalMarks",
+            "displayName",
+            "e164phone",
+            "firstValid",
+            "getEndOfString",
+            "getReferenceIdentityAttribute",
+            "identityAttribute",
+            "indexOf",
+            "iso3166",
+            "lastIndexOf",
+            "leftPad",
+            "lookup",
+            "lower",
+            "normalizeNames",
+            "randomAlphaNumeric",
+            "randomNumeric",
+            "reference",
+            "replace",
+            "replaceAll",
+            "rfc5646",
+            "rightPad",
+            "rule",
+            "split",
+            "static",
+            "substring",
+            "trim",
+            "upper",
+            "uuid",
+            "usernameGenerator"
+          ]
+        },
+        "requiresPeriodicRefresh": {
+          "type": "boolean",
+          "description": "Re-evaluate during nightly identity refresh."
+        },
+        "internal": {
+          "type": "boolean",
+          "description": "Set by ISC for built-in transforms. Ignored on push."
+        },
+        "attributes": {
+          "type": "object",
+          "description": "Type-specific configuration."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "accountAttribute"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "sourceName": {
+                    "type": "string",
+                    "description": "Display name of the source to read from."
+                  },
+                  "applicationId": {
+                    "type": "string",
+                    "description": "ID of the source (alternative to sourceName)."
+                  },
+                  "attributeName": {
+                    "type": "string",
+                    "description": "Account attribute to read."
+                  },
+                  "accountSortAttribute": {
+                    "type": "string",
+                    "description": "Attribute used to sort multiple accounts. Default: created."
+                  },
+                  "accountSortDescending": {
+                    "type": "boolean",
+                    "description": "Sort descending. Default: false."
+                  },
+                  "accountReturnFirstLink": {
+                    "type": "boolean",
+                    "description": "Return the first account's value even if null."
+                  },
+                  "accountFilter": {
+                    "type": "string",
+                    "description": "sailpoint.object.Filter expression to select accounts."
+                  },
+                  "accountPropertyFilter": {
+                    "type": "string",
+                    "description": "Filter applied to account properties in memory."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "attributeName"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "base64Decode"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "base64Encode"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "concat"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "description": "A literal value or a nested transform.",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "$ref": "#/definitions/transform"
+                        }
+                      ]
+                    },
+                    "description": "Values joined in order."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "values"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "conditional"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "expression": {
+                    "type": "string",
+                    "description": "Comparison, e.g. \"$department eq Engineering\"."
+                  },
+                  "positiveCondition": {
+                    "type": "string",
+                    "description": "Output when the expression is true."
+                  },
+                  "negativeCondition": {
+                    "type": "string",
+                    "description": "Output when the expression is false."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "expression",
+                  "positiveCondition",
+                  "negativeCondition"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "dateCompare"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "firstDate": {
+                    "description": "A literal value or a nested transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "secondDate": {
+                    "description": "A literal value or a nested transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "operator": {
+                    "enum": [
+                      "LT",
+                      "LTE",
+                      "GT",
+                      "GTE"
+                    ]
+                  },
+                  "positiveCondition": {
+                    "type": "string",
+                    "description": "Output when true."
+                  },
+                  "negativeCondition": {
+                    "type": "string",
+                    "description": "Output when false."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "firstDate",
+                  "secondDate",
+                  "operator",
+                  "positiveCondition",
+                  "negativeCondition"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "dateFormat"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "inputFormat": {
+                    "type": "string",
+                    "description": "Java SimpleDateFormat pattern or ISO8601, LDAP, PEOPLE_SOFT, EPOCH_TIME_JAVA, EPOCH_TIME_WIN32."
+                  },
+                  "outputFormat": {
+                    "type": "string",
+                    "description": "Output pattern or named format."
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "dateMath"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "expression": {
+                    "type": "string",
+                    "description": "Date math, e.g. \"now-5d/d\"."
+                  },
+                  "roundUp": {
+                    "type": "boolean",
+                    "description": "Round up when rounding (/)."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "expression"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "decomposeDiacriticalMarks"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "displayName"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "e164phone"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "defaultRegion": {
+                    "type": "string",
+                    "description": "ISO 3166-1 alpha-2 region used when the number has no country code."
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "firstValid"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "description": "A literal value or a nested transform.",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "$ref": "#/definitions/transform"
+                        }
+                      ]
+                    },
+                    "description": "Returns the first non-null value."
+                  },
+                  "ignoreErrors": {
+                    "type": "boolean",
+                    "description": "Skip values whose transforms throw."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "values"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "getEndOfString"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "numChars": {
+                    "type": "integer",
+                    "description": "Number of characters to return from the end."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "numChars"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "getReferenceIdentityAttribute"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "uid": {
+                    "type": "string",
+                    "description": "Identity uid, or \"manager\"."
+                  },
+                  "attributeName": {
+                    "type": "string",
+                    "description": "Identity attribute to read."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "uid",
+                  "attributeName"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "identityAttribute"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Technical name of the identity attribute."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "indexOf"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "substring": {
+                    "type": "string",
+                    "description": "Substring to find."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "substring"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "iso3166"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "format": {
+                    "enum": [
+                      "alpha2",
+                      "alpha3",
+                      "numeric"
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "lastIndexOf"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "substring": {
+                    "type": "string",
+                    "description": "Substring to find."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "substring"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "leftPad"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "length": {
+                    "type": "string",
+                    "description": "Target length."
+                  },
+                  "padding": {
+                    "type": "string",
+                    "description": "Padding character. Default: space."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "length"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "lookup"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "table": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Key/value table. Use \"default\" for unmatched input."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "table"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "lower"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "normalizeNames"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "randomAlphaNumeric"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "length": {
+                    "type": "string",
+                    "description": "Output length. Default 32, max 450."
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "randomNumeric"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "length": {
+                    "type": "string",
+                    "description": "Output length. Default 10, max 450."
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "reference"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Name of the transform to reuse."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "replace"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "regex": {
+                    "type": "string",
+                    "description": "Java regular expression."
+                  },
+                  "replacement": {
+                    "type": "string",
+                    "description": "Replacement text."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "regex",
+                  "replacement"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "replaceAll"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "table": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Regex \u2192 replacement pairs."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "table"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "rfc5646"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "format": {
+                    "enum": [
+                      "alpha2",
+                      "alpha3",
+                      "displayName"
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "rightPad"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "length": {
+                    "type": "string",
+                    "description": "Target length."
+                  },
+                  "padding": {
+                    "type": "string",
+                    "description": "Padding character. Default: space."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "length"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "rule"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name of the Generic cloud rule to run."
+                  },
+                  "operation": {
+                    "type": "string",
+                    "description": "Operation for rules that support several."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "split"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "delimiter": {
+                    "type": "string",
+                    "description": "Delimiter (regex)."
+                  },
+                  "index": {
+                    "type": "integer",
+                    "description": "Zero-based index of the part to return."
+                  },
+                  "throws": {
+                    "type": "boolean",
+                    "description": "Throw if the index is out of range."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "delimiter",
+                  "index"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "static"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "description": "Static value; supports Velocity, e.g. \"$firstName.$lastName\"."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "value"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "substring"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  },
+                  "begin": {
+                    "type": "integer",
+                    "description": "Start index, -1 for start of string."
+                  },
+                  "beginOffset": {
+                    "type": "integer",
+                    "description": "Offset added to begin."
+                  },
+                  "end": {
+                    "type": "integer",
+                    "description": "End index, -1 for end of string."
+                  },
+                  "endOffset": {
+                    "type": "integer",
+                    "description": "Offset added to end."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "begin"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "trim"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "upper"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "description": "Explicit input. Defaults to the attribute value flowing into this transform.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/definitions/transform"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "uuid"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "usernameGenerator"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "patterns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Velocity patterns tried in order, e.g. \"$fi$ln${uniqueCounter}\"."
+                  },
+                  "sourceCheck": {
+                    "type": "boolean",
+                    "description": "Also check uniqueness against the target source."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "patterns"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "#/definitions/transform"
+    },
+    {
+      "required": [
+        "name",
+        "type"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+<idea-plugin>
+    <id>com.sailpoint.intellij</id>
+    <name>SailPoint Identity Security Cloud</name>
+    <vendor>SailPoint</vendor>
+    <description><![CDATA[
+    Work with SailPoint Identity Security Cloud from the IDE.
+    <ul>
+      <li>Connect to any number of tenants and browse their sources, transforms, connector rules and identities in the <b>SailPoint</b> tool window</li>
+      <li>Edit transforms as JSON with schema-based completion and validation, then push them back to your tenant</li>
+      <li>Edit sources and their schemas, provisioning policies, aggregation schedules, correlation config, attribute sync, native change detection and deletion approvals as JSON and push them back to your tenant</li>
+      <li>Edit connector rule scripts and push them back to your tenant</li>
+    </ul>
+    Add tenants from the tool window or under <b>Settings | Tools | SailPoint ISC</b>. Each tenant uses its own Personal Access Token.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.json</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="SailPoint" anchor="right" icon="/icons/sailpoint.svg"
+                    factoryClass="com.sailpoint.intellij.explorer.IscToolWindowFactory"/>
+        <applicationConfigurable parentId="tools" id="com.sailpoint.intellij.settings" displayName="SailPoint ISC"
+                                 instance="com.sailpoint.intellij.settings.IscConfigurable"/>
+        <editorTabTitleProvider implementation="com.sailpoint.intellij.editor.IscEditorTabTitleProvider"/>
+        <editorNotificationProvider implementation="com.sailpoint.intellij.editor.IscEditorNotificationProvider"/>
+        <notificationGroup id="SailPoint ISC" displayType="BALLOON"/>
+    </extensions>
+
+    <projectListeners>
+        <listener class="com.sailpoint.intellij.editor.IscOpenEditorsUpdater"
+                  topic="com.sailpoint.intellij.settings.IscSettingsListener"/>
+    </projectListeners>
+
+    <extensions defaultExtensionNs="JavaScript.JsonSchema">
+        <ProviderFactory implementation="com.sailpoint.intellij.schema.TransformSchemaProviderFactory"/>
+    </extensions>
+
+    <actions>
+        <action id="SailPoint.PushToIsc" class="com.sailpoint.intellij.editor.PushToIscAction"
+                text="Push to SailPoint ISC" description="Save this object to the SailPoint ISC tenant"
+                icon="AllIcons.Actions.Upload">
+            <keyboard-shortcut keymap="$default" first-keystroke="control alt shift U"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+        </action>
+    </actions>
+</idea-plugin>
