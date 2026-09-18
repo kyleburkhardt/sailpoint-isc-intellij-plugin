@@ -71,9 +71,11 @@ Source
 - [x] **PR #1** (README, CI, releases, CodeQL) merged 2026-09-18.
 - [x] **GitHub Pages enabled** with GitHub Actions as the source. The `github-pages` environment allows deploys from `master` and from `v*` tags; the release deploys from its tag.
 
+- [x] **v0.1.0 released** 2026-09-18: the zip is on the [GitHub Release](https://github.com/kyleburkhardt/sailpoint-isc-intellij-plugin/releases/tag/v0.1.0), and the update feed `https://kyleburkhardt.github.io/sailpoint-isc-intellij-plugin/updatePlugins.xml` is live and points at it.
+
 ### In progress
-- [ ] **This plan** (`docs/PLAN.md`) goes onto `master` through its own PR.
-- [ ] **First release:** tag `v0.1.0`, then check the release zip and the feed at `https://kyleburkhardt.github.io/sailpoint-isc-intellij-plugin/updatePlugins.xml`.
+- [ ] **PR #2:** this plan (`docs/PLAN.md`) onto `master`.
+- [ ] **PR #3:** phase 3 (see below). Built and passing locally; not yet tried on a live tenant.
 - [ ] **Repo settings suggested but not applied:**
   - Make `build` (and `analyze`) required checks in the ruleset.
   - Turn on **Automatically delete head branches** and **Always suggest updating pull request branches**.
@@ -91,7 +93,7 @@ Source
 
 ## To do
 
-### Phase 3: structure changes
+### Phase 3: structure changes (built in PR #3; tick these once tested on a live tenant)
 - [ ] **New Entitlement Type…** on the Entitlements folder: a dialog for name, native object type, identity attribute and display attribute, then `POST /sources/v1/{sourceId}/schemas`, then reload the folder.
 - [ ] **Delete schema** on an entitlement type's Schema (`DELETE …/schemas/{id}`). **Never offer it on the account schema.**
 - [ ] **Delete source:** load `GET /sources/v1/{id}/connections` first and list what uses the source (identity profiles, transforms, rules); confirm by **typing the source name**; `DELETE /sources/v1/{id}` returns 202 with a task, so follow it with `TaskTracker`; reload Sources when it finishes.
