@@ -194,6 +194,42 @@ class IscEditorService(private val project: Project) {
         FileEditorManager.getInstance(project).openFile(file, true)
     }
 
+    /** Creates a schema (an entitlement type) on [source], then opens it to fill in its attributes. */
+    fun createSchema(source: IscItem, schema: JsonObject) {
+        val kind = ResourceKind.SOURCE_SCHEMAS
+        background("Creating entitlement type ${schema.string("name")} on ${source.name}") {
+            val client = service<IscClient>()
+            val json = client.post(source.tenantId, client.collectionPath(kind, source.id), schema).asJsonObject
+            onEdt {
+                val id = kind.toItem(source.tenantId, json, source).id
+                val file = IscVirtualFile(source.tenantId, kind, source, id, json)
+                openFiles[Key(source.tenantId, kind, source.id, id)] = file
+                FileEditorManager.getInstance(project).openFile(file, true)
+                notify("Entitlement type '${json.string("name")}' created on ${source.name}.", NotificationType.INFORMATION)
+                announce(source.tenantId, kind, source.id)
+            }
+        }
+    }
+
+    /** Closes the editors of [source] and of everything that belongs to it, e.g. after it was deleted. */
+    fun closeEditorsOf(source: IscItem) {
+        val manager = FileEditorManager.getInstance(project)
+        openFiles.entries.filter { (key, _) ->
+            key.tenantId == source.tenantId && ((key.kind == source.kind && key.id == source.id) || key.parentId == source.id)
+        }.forEach { (key, file) ->
+            openFiles.remove(key)
+            manager.closeFile(file)
+        }
+    }
+
+    /** Shows ISC's latest copy of [item] in its open editor, unless the user has unpushed changes there. */
+    fun refreshIfOpen(item: IscItem, json: JsonObject) {
+        val file = openFiles[Key(item.tenantId, item.kind, item.parent?.id, item.id)] ?: return
+        if (!FileEditorManager.getInstance(project).isFileOpen(file) || hasLocalChanges(file)) return
+        file.remote = json
+        replaceText(file, documentText(file), file.textFor(json))
+    }
+
     fun hasLocalChanges(file: IscVirtualFile): Boolean = documentText(file) != file.syncedText
 
     /** Sends the editor contents to ISC, creating the object if it has no ID yet. */
@@ -315,7 +351,7 @@ class IscEditorService(private val project: Project) {
         EditorNotifications.getInstance(project).updateNotifications(file)
     }
 
-    private fun announce(tenantId: String, kind: ResourceKind, parentId: String?) {
+    fun announce(tenantId: String, kind: ResourceKind, parentId: String?) {
         project.messageBus.syncPublisher(IscChangeListener.TOPIC).changed(tenantId, kind, parentId)
     }
 
