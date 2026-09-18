@@ -32,12 +32,14 @@ jobs:
           build-mode: manual
 
       # CodeQL extracts code by watching the compiler, so compile for real: no build cache or configuration cache,
-      # and the Kotlin compiler in the Gradle process rather than a daemon CodeQL can't see.
+      # and the Kotlin compiler in the Gradle process rather than a daemon CodeQL can't see. CodeQL 2.27 only
+      # supports Kotlin below 2.4.20, so this compiles with 2.4.10; raise it as CodeQL catches up.
       - name: Compile
         run: >
           ./gradlew compileKotlin compileTestKotlin
           --no-build-cache --no-configuration-cache --rerun-tasks
           -Pkotlin.compiler.execution.strategy=in-process
+          -PkotlinVersion=2.4.10
 
       - uses: github/codeql-action/analyze@v4
         with:
