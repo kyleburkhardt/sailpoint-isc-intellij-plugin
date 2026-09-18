@@ -1,0 +1,46 @@
+name: CodeQL
+
+# Code scanning for pull requests and master, which the ruleset on master requires before merging.
+# Uses an explicit build (JDK 25 + Gradle) because CodeQL's automatic build can't set that up.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: '17 6 * * 1'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin
+          build-mode: manual
+
+      # CodeQL extracts code by watching the compiler, so compile for real: no build cache or configuration cache,
+      # and the Kotlin compiler in the Gradle process rather than a daemon CodeQL can't see. CodeQL 2.27 only
+      # supports Kotlin below 2.4.20, so this compiles with 2.4.10; raise it as CodeQL catches up.
+      - name: Compile
+        run: >
+          ./gradlew compileKotlin compileTestKotlin
+          --no-build-cache --no-configuration-cache --rerun-tasks
+          -Pkotlin.compiler.execution.strategy=in-process
+          -PkotlinVersion=2.4.10
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:java-kotlin
