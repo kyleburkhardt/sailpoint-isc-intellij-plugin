@@ -6,7 +6,7 @@
     Work with SailPoint Identity Security Cloud from the IDE.
     <ul>
       <li>Connect to any number of tenants and browse their sources, transforms, connector rules and identities in the <b>SailPoint</b> tool window</li>
-      <li>Edit transforms as JSON with schema-based completion and validation, then push them back to your tenant</li>
+      <li>Build transforms on a form, with every operation's result shown live for your own test input, and the JSON one click away</li>
       <li>Edit sources and their schemas, provisioning policies, aggregation schedules, correlation config, attribute sync, native change detection and deletion approvals as JSON and push them back to your tenant</li>
       <li>Edit connector rule scripts and push them back to your tenant</li>
     </ul>
@@ -21,6 +21,7 @@
                     factoryClass="com.sailpoint.intellij.explorer.IscToolWindowFactory"/>
         <applicationConfigurable parentId="tools" id="com.sailpoint.intellij.settings" displayName="SailPoint ISC"
                                  instance="com.sailpoint.intellij.settings.IscConfigurable"/>
+        <fileEditorProvider implementation="com.sailpoint.intellij.transform.ui.TransformFormEditorProvider"/>
         <editorTabTitleProvider implementation="com.sailpoint.intellij.editor.IscEditorTabTitleProvider"/>
         <editorNotificationProvider implementation="com.sailpoint.intellij.editor.IscEditorNotificationProvider"/>
         <notificationGroup id="SailPoint ISC" displayType="BALLOON"/>

@@ -26,6 +26,7 @@ import com.sailpoint.intellij.api.IscItem
 import com.sailpoint.intellij.api.ResourceKind
 import com.sailpoint.intellij.api.string
 import com.sailpoint.intellij.schedule.EditScheduleDialog
+import com.sailpoint.intellij.transform.TransformCatalog
 import java.util.concurrent.ConcurrentHashMap
 
 @Service(Service.Level.PROJECT)
@@ -90,11 +91,25 @@ class IscEditorService(private val project: Project) {
         }
     }
 
+    /** Opens an unsaved transform of [type], with that operation's required attributes ready to fill in. */
     fun newTransform(tenantId: String, name: String, type: String) {
         val json = JsonObject().apply {
             addProperty("name", name)
             addProperty("type", type)
-            add("attributes", JsonObject())
+            add("attributes", TransformCatalog.starterAttributes(type))
+        }
+        FileEditorManager.getInstance(project).openFile(IscVirtualFile(tenantId, ResourceKind.TRANSFORMS, null, null, json), true)
+    }
+
+    /**
+     * Opens a transform that isn't in ISC and doesn't have to be: somewhere to try operations out. It only reaches the
+     * tenant if it's given a name and created there.
+     */
+    fun openPlayground(tenantId: String) {
+        val json = JsonObject().apply {
+            addProperty("name", "Playground")
+            addProperty("type", "static")
+            add("attributes", TransformCatalog.starterAttributes("static"))
         }
         FileEditorManager.getInstance(project).openFile(IscVirtualFile(tenantId, ResourceKind.TRANSFORMS, null, null, json), true)
     }

@@ -116,6 +116,10 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
     private val newTransform = action("New Transform…", AllIcons.FileTypes.Json, { tenants().isNotEmpty() }) {
         NewTransformDialog(project, selectedTenant()?.id).showAndCreate()
     }
+    private val playground = action("Transform Playground", AllIcons.Actions.RunAll, { tenants().isNotEmpty() }) {
+        val tenantId = selectedTenant()?.id ?: tenants().firstOrNull()?.id ?: return@action
+        project.service<IscEditorService>().openPlayground(tenantId)
+    }
     private val newSource = action("New Source…", AllIcons.General.Add, { selectedCategory()?.kind == ResourceKind.SOURCES }) {
         selectedCategory()?.let { NewSourceDialog(project, it.tenantId).showAndChoose() }
     }
@@ -173,7 +177,7 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
         is TenantData -> listOf(addTenant, editTenant, removeTenant)
         is CategoryData -> when (data.kind) {
             ResourceKind.SOURCES -> listOf(newSource)
-            ResourceKind.TRANSFORMS -> listOf(newTransform)
+            ResourceKind.TRANSFORMS -> listOf(newTransform, playground)
             ResourceKind.SOURCE_PROVISIONING_POLICIES -> listOf(newProvisioningPolicy)
             else -> emptyList()
         }
@@ -234,7 +238,7 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
         })
 
         toolbar = ActionManager.getInstance()
-            .createActionToolbar("SailPointIscExplorer", DefaultActionGroup(addTenant, refresh, newTransform, Separator.getInstance(), settings), true)
+            .createActionToolbar("SailPointIscExplorer", DefaultActionGroup(addTenant, refresh, newTransform, playground, Separator.getInstance(), settings), true)
             .also { it.targetComponent = this }
             .component
         PopupHandler.installPopupMenu(tree, ContextMenu(), "SailPointIscExplorerPopup")
