@@ -162,13 +162,29 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
         add(sourceAction("Peek Resource Objects…") { runner().peekResourceObjects(it) })
         addSeparator()
         add(sourceAction("Synchronize Attributes (Experimental)") { runner().synchronizeAttributes(it) })
+        addSeparator()
+        add(sourceAction("Upload Connector File…") { source ->
+            val descriptor = FileChooserDescriptorFactory.singleFile().withTitle("Connector File (e.g. a JDBC Driver)")
+            FileChooser.chooseFile(descriptor, project, null)?.toNioPath()?.let { runner().uploadConnectorFile(source, it) }
+        })
+        add(sourceAction("Remove All Accounts…") { runner().removeAllAccounts(it) })
+    }
+
+    private val deleteSource = action("Delete Source…", AllIcons.General.Remove, { selectedItem()?.kind == ResourceKind.SOURCES }) {
+        selectedItem()?.takeIf { it.kind == ResourceKind.SOURCES }?.let { runner().deleteSource(it) }
+    }
+
+    private val newEntitlementType = action(
+        "New Entitlement Type…", AllIcons.General.Add, { selectedFolder()?.content == FolderContent.ENTITLEMENTS },
+    ) {
+        newEntitlementType()
     }
 
     /** Actions shown in the context menu of every node, above the node's own [nodeActions]. */
     private val commonActions: List<AnAction> = listOf(refresh)
 
     /** Context menu actions specific to the right-clicked node; null when nothing is selected. */
-    private fun nodeActions(data: NodeData?): List<AnAction> = when (data) {
+    private fun nodeActions(node: DefaultMutableTreeNode?): List<AnAction> = when (val data = node?.userObject as? NodeData) {
         null -> listOf(addTenant)
         is TenantData -> listOf(addTenant, editTenant, removeTenant)
         is CategoryData -> when (data.kind) {
@@ -177,11 +193,18 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
             ResourceKind.SOURCE_PROVISIONING_POLICIES -> listOf(newProvisioningPolicy)
             else -> emptyList()
         }
-        is GroupData -> if (data.content == null) emptyList() else listOf(newSchedule)
+        is GroupData -> when (data.content) {
+            FolderContent.ACCOUNTS -> listOf(newSchedule)
+            FolderContent.ENTITLEMENTS -> listOf(newSchedule, newEntitlementType)
+            null -> emptyList()
+        }
         is ItemData -> listOfNotNull(
             open,
             runGroup.takeIf { data.item.kind == ResourceKind.SOURCES },
             when {
+                data.item.kind == ResourceKind.SOURCES -> deleteSource
+                // Every source needs its account schema, so only entitlement types' schemas can go.
+                data.item.kind == ResourceKind.SOURCE_SCHEMAS -> deleteItem.takeIf { entitlementType(node) != null }
                 !data.item.kind.deletable -> null
                 data.item.kind.singleton -> removeConfiguration
                 else -> deleteItem
@@ -498,15 +521,34 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
 
     /** Deletes the selected object in ISC after confirming; the tree reloads when ISC confirms. */
     private fun deleteSelection() {
+        val node = tree.lastSelectedPathComponent as? DefaultMutableTreeNode
         val item = selectedItem()?.takeIf { it.kind.deletable } ?: return
+        val type = entitlementType(node)
+        if (item.kind == ResourceKind.SOURCE_SCHEMAS && type == null) return
         val where = item.parent?.let { " from ${it.kind.singularName} '${it.name}'" }.orEmpty()
-        val question = if (item.kind.singleton) {
-            "Remove the ${item.kind.singularName}$where? Its settings are deleted in ISC."
-        } else {
-            "Delete ${item.kind.singularName} '${item.name}'$where? This can't be undone."
+        val question = when {
+            type != null -> "Delete entitlement type '$type' (its schema)$where? This can't be undone."
+            item.kind.singleton -> "Remove the ${item.kind.singularName}$where? Its settings are deleted in ISC."
+            else -> "Delete ${item.kind.singularName} '${item.name}'$where? This can't be undone."
         }
         if (Messages.showYesNoDialog(project, question, "Delete from SailPoint ISC", Messages.getWarningIcon()) != Messages.YES) return
         project.service<IscEditorService>().delete(item)
+    }
+
+    /** The entitlement type a schema node belongs to (its folder under Entitlements), or null for any other node. */
+    private fun entitlementType(node: DefaultMutableTreeNode?): String? {
+        if ((node?.userObject as? ItemData)?.item?.kind != ResourceKind.SOURCE_SCHEMAS) return null
+        val typeFolder = node.parent as? DefaultMutableTreeNode ?: return null
+        val entitlements = (typeFolder.parent as? DefaultMutableTreeNode)?.userObject as? GroupData
+        return (typeFolder.userObject as? GroupData)?.name?.takeIf { entitlements?.content == FolderContent.ENTITLEMENTS }
+    }
+
+    /** Offers a new entitlement type (schema) on the source whose Entitlements folder is selected. */
+    private fun newEntitlementType() {
+        val node = tree.lastSelectedPathComponent as? DefaultMutableTreeNode ?: return
+        val data = node.userObject as? GroupData ?: return
+        val existing = node.childNodes().mapNotNull { (it.userObject as? GroupData)?.name }.toSet()
+        NewEntitlementTypeDialog(project, data.parent, existing).showAndCreate()
     }
 
     private fun selectedCategory(): CategoryData? =
@@ -590,7 +632,7 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun getChildren(e: AnActionEvent?): Array<AnAction> {
-            val specific = nodeActions((tree.lastSelectedPathComponent as? DefaultMutableTreeNode)?.userObject as? NodeData)
+            val specific = nodeActions(tree.lastSelectedPathComponent as? DefaultMutableTreeNode)
             val separator = if (specific.isEmpty()) emptyList() else listOf(Separator.getInstance())
             return (commonActions + separator + specific).toTypedArray()
         }

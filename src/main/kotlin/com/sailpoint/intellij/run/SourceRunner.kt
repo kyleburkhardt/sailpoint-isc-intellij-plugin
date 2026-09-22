@@ -10,6 +10,8 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.ThrowableComputable
+import com.intellij.openapi.util.text.StringUtil
+import com.sailpoint.intellij.api.IscApiException
 import com.sailpoint.intellij.api.IscClient
 import com.sailpoint.intellij.api.IscItem
 import com.sailpoint.intellij.api.ResourceKind
@@ -77,6 +79,95 @@ class SourceRunner(private val project: Project) {
             }
         }
     }
+
+    /**
+     * Deletes [source] after listing what still uses it (identity profiles, transforms, apps…) and having its name
+     * typed to confirm. ISC deletes in the background, so this follows the task and reloads Sources when it's done.
+     */
+    fun deleteSource(source: IscItem) {
+        background("Checking what uses ${source.name}") {
+            val usage = try {
+                describeConnections(client.get(source.tenantId, "${sourcePath(source)}/connections").asJsonObject)
+            } catch (e: IscApiException) {
+                listOf("Couldn't check what uses this source: ${e.message}")
+            }
+            onEdt {
+                val warning = "Deleting <b>${source.name.escaped()}</b> removes it from ISC along with its accounts and " +
+                    "entitlements. This can't be undone." +
+                    if (usage.isEmpty()) "<br><br>Nothing else in ISC uses this source." else "<br><br>These use this source:"
+                if (!ConfirmByNameDialog(project, "Delete Source", warning, usage, source.name, "Delete Source").showAndGet()) return@onEdt
+                background("Deleting ${source.name}") {
+                    val response = client.delete(source.tenantId, sourcePath(source)).asJsonObject
+                    val taskId = response.string("id")?.takeIf { response.string("type") == "TASK_RESULT" }
+                    onEdt {
+                        val editors = project.service<IscEditorService>()
+                        editors.closeEditorsOf(source)
+                        if (taskId == null) {
+                            Notifier.notify(project, "Source '${source.name}' deleted.", NotificationType.INFORMATION)
+                            editors.announce(source.tenantId, ResourceKind.SOURCES, null)
+                        } else {
+                            TaskTracker.track(project, source.tenantId, "Deleting source '${source.name}'", taskId) {
+                                editors.announce(source.tenantId, ResourceKind.SOURCES, null)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Removes every account from [source] in ISC, once its name has been typed to confirm, and follows the task. */
+    fun removeAllAccounts(source: IscItem) {
+        val warning = "This removes <b>all accounts</b> of <b>${source.name.escaped()}</b> from ISC, along with the access " +
+            "identities get through them. They come back only through the next aggregation."
+        if (!ConfirmByNameDialog(project, "Remove All Accounts", warning, emptyList(), source.name, "Remove All Accounts").showAndGet()) return
+        background("Starting account removal from ${source.name}") {
+            val response = client.postWithoutBody(source.tenantId, "${sourcePath(source)}/remove-accounts").asJsonObject
+            val taskId = response.string("id")
+            onEdt {
+                if (taskId == null) {
+                    Notifier.notify(project, "Removing all accounts of '${source.name}' started.", NotificationType.INFORMATION)
+                } else {
+                    TaskTracker.track(project, source.tenantId, "Removing all accounts of '${source.name}'", taskId)
+                }
+            }
+        }
+    }
+
+    /** Uploads a file the connector needs, such as a JDBC driver, and shows the updated source if it's open. */
+    fun uploadConnectorFile(source: IscItem, file: Path) {
+        background("Uploading ${file.fileName} to ${source.name}") {
+            val updated = client.postMultipart(source.tenantId, "${sourcePath(source)}/upload-connector-file", file = file).asJsonObject
+            onEdt {
+                project.service<IscEditorService>().refreshIfOpen(source, updated)
+                Notifier.notify(project, "Uploaded ${file.fileName} to '${source.name}'.", NotificationType.INFORMATION)
+            }
+        }
+    }
+
+    /** One line per thing that uses a source, from its `/connections`, grouped by what kind of thing it is. */
+    private fun describeConnections(connections: JsonObject): List<String> {
+        val labels = linkedMapOf(
+            "identityProfiles" to "Identity profile",
+            "credentialProfiles" to "Credential profile",
+            "sourceAttributes" to "Source attribute",
+            "mappingProfiles" to "Mapping profile",
+            "dependentCustomTransforms" to "Transform",
+            "dependentApps" to "App",
+        )
+        return labels.flatMap { (field, label) ->
+            connections.getAsJsonArray(field)?.mapNotNull { element ->
+                val name = when {
+                    element.isJsonPrimitive -> element.asString
+                    element.isJsonObject -> element.asJsonObject.let { it.string("name") ?: it.string("id") }
+                    else -> null
+                }
+                name?.let { "$label: $it" }
+            }.orEmpty()
+        }
+    }
+
+    private fun String.escaped() = StringUtil.escapeXmlEntities(this)
 
     /** Starts a task in ISC and follows it until it finishes. */
     private fun startTask(source: IscItem, what: String, action: String, fields: Map<String, String> = emptyMap(), file: Path? = null) {
