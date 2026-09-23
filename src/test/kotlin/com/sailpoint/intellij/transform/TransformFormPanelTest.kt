@@ -26,6 +26,18 @@ class TransformFormPanelTest {
     }
 
     @Test
+    fun `a chain of steps renders`() {
+        val json = """
+            {"name":"Surname","type":"upper","attributes":{"input":
+              {"type":"split","attributes":{"delimiter":" ","index":1,"input":
+                {"type":"trim"}}}}}
+        """.trimIndent()
+        val panel = TransformFormPanel(nameEditable = true) {}
+        panel.setModel(JsonParser.parseString(json).asJsonObject)
+        assertTrue(panel.component.componentCount > 0)
+    }
+
+    @Test
     fun `every operation renders`() {
         TransformCatalog.ops.forEach { op ->
             val transform = JsonParser.parseString("""{"name":"T","type":"${op.type}"}""").asJsonObject
