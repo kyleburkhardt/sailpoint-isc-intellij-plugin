@@ -16,8 +16,11 @@ sealed interface EvalResult {
     /** Data only the tenant has. The preview asks for it rather than guessing. */
     data class Needs(val need: NeededInput) : EvalResult
 
-    /** The transform can't run as written: a missing attribute, a bad pattern, an ISC error. */
-    data class Failure(val message: String) : EvalResult
+    /**
+     * The transform can't run as written: a missing attribute, a bad pattern, an ISC error. [brief] is a few words for
+     * where the whole [message] won't fit.
+     */
+    data class Failure(val message: String, val brief: String? = null) : EvalResult
 
     /** The value, or null when this result isn't one. */
     val textOrNull: String? get() = (this as? Value)?.text
@@ -119,7 +122,7 @@ class TransformEvaluator(private val context: EvalContext) {
         depth++
         val result = try {
             if (op == null) {
-                EvalResult.Failure(unsupported(type))
+                EvalResult.Failure(unsupported(type), brief = if (TransformCatalog[type] != null) "not previewed yet" else "unknown operation")
             } else {
                 // An explicit `input` attribute replaces whatever was flowing in.
                 when (val incoming = if (attributes.has("input")) resolve(attributes.get("input"), input, join(path, "input")) else EvalResult.Value(input)) {

@@ -10,6 +10,7 @@ import com.sailpoint.intellij.transform.EvalContext
 import com.sailpoint.intellij.transform.NeedKind
 import com.sailpoint.intellij.transform.NeededInput
 import java.awt.BorderLayout
+import kotlin.random.Random
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.event.DocumentEvent
@@ -24,6 +25,7 @@ class TestInputPanel(private val onChange: () -> Unit) {
     private var incoming = ""
     private var needs = emptyList<NeededInput>()
     private var readsInput = true
+    private val seed = Random.nextInt()
 
     private val container = JPanel(BorderLayout())
 
@@ -55,6 +57,8 @@ class TestInputPanel(private val onChange: () -> Unit) {
 
     fun context(): EvalContext = EvalContext(
         input = incoming.ifEmpty { null },
+        // The same seed every run, so a random value holds still while you type instead of changing on every key.
+        random = Random(seed),
         identityAttributes = filled(NeedKind.IDENTITY_ATTRIBUTE).associate { (need, value) -> need.name to value },
         accountAttributes = filled(NeedKind.ACCOUNT_ATTRIBUTE)
             .groupBy { (need, _) -> need.qualifier.orEmpty() }

@@ -16,6 +16,7 @@ import com.intellij.ui.InplaceButton
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.ui.dsl.builder.AlignX
@@ -292,11 +293,31 @@ class TransformFormPanel(
         }
     }.apply { border = JBUI.Borders.empty(4, indentOf(0) + JBUI.scale(20), 4, 8) }
 
+    /** The final result in full: wrapped rather than cut short, and selectable so it can be copied. */
     private fun resultRow(): JComponent {
-        val value = JBLabel()
-        updaters += { trace -> show(value, trace.result) }
+        val value = JBTextArea().apply {
+            isEditable = false
+            isOpaque = false
+            lineWrap = true
+            wrapStyleWord = false
+            border = JBUI.Borders.empty()
+            font = UIUtil.getLabelFont()
+        }
+        updaters += { trace ->
+            val result = trace.result
+            value.text = when (result) {
+                is EvalResult.Value -> result.text?.let { "\"$it\"" } ?: "nothing"
+                is EvalResult.Needs -> result.need.prompt
+                is EvalResult.Failure -> result.message
+            }
+            value.foreground = when {
+                result is EvalResult.Failure -> JBColor.RED
+                result is EvalResult.Value && result.text != null -> UIUtil.getLabelForeground()
+                else -> UIUtil.getContextHelpForeground()
+            }
+        }
         return BorderLayoutPanel().apply {
-            border = JBUI.Borders.empty(0, indentOf(0) + JBUI.scale(20), 12, 8)
+            border = JBUI.Borders.empty(0, indentOf(0) + ARROW_WIDTH, 12, 8)
             addToCenter(value)
         }
     }
@@ -800,7 +821,7 @@ class TransformFormPanel(
                 label.foreground = UIUtil.getContextHelpForeground()
             }
             is EvalResult.Failure -> {
-                label.text = clip(result.message)
+                label.text = result.brief ?: clip(result.message)
                 label.icon = AllIcons.General.Error
                 label.toolTipText = result.message
                 label.foreground = JBColor.RED
@@ -863,7 +884,7 @@ class TransformFormPanel(
         )
 
         const val SUMMARY_LENGTH = 40
-        const val VALUE_LENGTH = 24
+        const val VALUE_LENGTH = 36
         val ARROW_WIDTH: Int get() = AllIcons.General.ArrowRight.iconWidth + JBUI.scale(6)
     }
 }

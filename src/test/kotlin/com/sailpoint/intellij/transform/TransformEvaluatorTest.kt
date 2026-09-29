@@ -196,6 +196,25 @@ class TransformEvaluatorTest {
     }
 
     @Test
+    fun `uuid and the random generators make values of the documented shape`() {
+        val seeded = EvalContext(random = kotlin.random.Random(7))
+        val uuid = (output("""{"type":"uuid"}""", context = seeded) as EvalResult.Value).text.orEmpty()
+        assertTrue(uuid, Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}").matches(uuid))
+
+        val alpha = (output("""{"type":"randomAlphaNumeric"}""", context = seeded) as EvalResult.Value).text.orEmpty()
+        assertTrue(alpha, Regex("[A-Za-z0-9]{32}").matches(alpha))
+        val digits = (output("""{"type":"randomNumeric","attributes":{"length":"5"}}""", context = seeded) as EvalResult.Value).text.orEmpty()
+        assertTrue(digits, Regex("[0-9]{5}").matches(digits))
+        assertTrue(failure("""{"type":"randomNumeric","attributes":{"length":"451"}}""").contains("450"))
+
+        // The same seed gives the same value, so a preview doesn't change while you type.
+        assertEquals(
+            output("""{"type":"uuid"}""", context = EvalContext(random = kotlin.random.Random(1))),
+            output("""{"type":"uuid"}""", context = EvalContext(random = kotlin.random.Random(1))),
+        )
+    }
+
+    @Test
     fun `an operation that isn't previewed yet says so`() {
         assertTrue(failure("""{"type":"dateMath","attributes":{"expression":"now"}}""").contains("isn't previewed yet"))
         assertTrue(failure("""{"type":"nonsense"}""").contains("isn't a transform operation"))
