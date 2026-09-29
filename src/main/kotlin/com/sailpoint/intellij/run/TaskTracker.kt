@@ -2,6 +2,7 @@ package com.sailpoint.intellij.run
 
 import com.google.gson.JsonObject
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
@@ -16,7 +17,8 @@ import com.sailpoint.intellij.api.string
 object TaskTracker {
     private const val POLL_MS = 3_000L
 
-    fun track(project: Project, tenantId: String, title: String, taskId: String) {
+    /** [onFinished] runs on the EDT with the final status once the task completes, e.g. to reload the tree. */
+    fun track(project: Project, tenantId: String, title: String, taskId: String, onFinished: ((JsonObject) -> Unit)? = null) {
         object : Task.Backgroundable(project, title, true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
@@ -30,6 +32,7 @@ object TaskTracker {
                     status.string("progress")?.let { indicator.text2 = it }
                     if (status.string("completed") != null || status.string("completionStatus") != null) {
                         report(project, title, status)
+                        onFinished?.let { ApplicationManager.getApplication().invokeLater({ it(status) }, project.disposed) }
                         return
                     }
                     waitCancellable(indicator, POLL_MS)

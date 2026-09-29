@@ -31,9 +31,9 @@ Active Directory
 
 Right-click for what fits each item:
 
-- **Create:** new transforms, provisioning policies (human or machine account), and aggregation schedules.
-- **Delete:** transforms, connector rules, provisioning policies and schedules, and **Remove Configuration** for native change detection.
-- **Run** (on a source): aggregate accounts or entitlements (also from a CSV file for delimited-file sources), process uncorrelated accounts, test the connection or configuration, ping the cluster, peek at raw resource objects, and synchronize attributes. Long-running tasks show progress and report their outcome when they finish.
+- **Create:** new transforms, provisioning policies (human or machine account), aggregation schedules, and entitlement types (**New Entitlement Type…** on Entitlements).
+- **Delete:** transforms, connector rules, provisioning policies, schedules and entitlement types, and **Remove Configuration** for native change detection. **Delete Source…** first lists what still uses the source (identity profiles, transforms, apps…) and asks you to type its name.
+- **Run** (on a source): aggregate accounts or entitlements (also from a CSV file for delimited-file sources), process uncorrelated accounts, test the connection or configuration, ping the cluster, peek at raw resource objects, synchronize attributes, upload a connector file (such as a JDBC driver), and **Remove All Accounts…** (confirmed by typing the source's name). Long-running tasks show progress and report their outcome when they finish.
 - **Edit Schedule…** (in a schedule's banner): build aggregation schedules by picking days and times, without writing cron. The plugin converts between the tenant's time zone and the UTC cron that ISC stores, and you can still edit the cron directly.
 - **New Source…** (on Sources): search the tenant's connectors. This is the first step of a guided New Source form that's still being built.
 
