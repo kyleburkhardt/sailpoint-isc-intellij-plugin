@@ -39,6 +39,7 @@ import com.sailpoint.intellij.transform.TransformEvaluator
 import com.sailpoint.intellij.transform.evaluate
 import com.sailpoint.intellij.transform.neededInputs
 import com.sailpoint.intellij.transform.readsImplicitInput
+import java.awt.BorderLayout
 import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Rectangle
@@ -173,11 +174,16 @@ class TransformFormPanel(
     private fun step(node: JsonObject, path: String, number: Int) {
         val earlier = node.attributes().get("input").isTransform()
         val later = path.isNotEmpty()
-        val moves = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+        val arrows = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
             isOpaque = false
-            border = JBUI.Borders.emptyLeft(4)
             add(iconButton("Move up", AllIcons.Actions.MoveUp) { moveStep(path, up = true) }.apply { isEnabled = earlier })
             add(iconButton("Move down", AllIcons.Actions.MoveDown) { moveStep(path, up = false) }.apply { isEnabled = later })
+        }
+        // Holds the arrows' space while they're hidden, so the row doesn't shift when they appear.
+        val moves = JPanel(BorderLayout()).apply {
+            isOpaque = false
+            preferredSize = arrows.preferredSize
+            add(arrows, BorderLayout.CENTER)
         }
         operation(node, path, indent = 0, lead = "$number", chained = true, moves = moves.takeIf { earlier || later })
     }
@@ -361,6 +367,7 @@ class TransformFormPanel(
             add(JBLabel(if (open) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight))
             if (lead.isNotEmpty()) add(JBLabel(lead).apply { foreground = UIUtil.getContextHelpForeground() })
             add(JBLabel(title))
+            moves?.let(::add)
         }
         val summary = JBLabel(detail).apply {
             foreground = UIUtil.getContextHelpForeground()
@@ -371,7 +378,7 @@ class TransformFormPanel(
             border = JBUI.Borders.empty(2, indentOf(indent), 2, 8)
             addToLeft(left)
             addToCenter(summary)
-            addToRight(BorderLayoutPanel().apply { isOpaque = false; addToCenter(value); moves?.let(::addToRight) })
+            addToRight(value)
             isOpaque = true
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             addMouseListener(
@@ -390,6 +397,7 @@ class TransformFormPanel(
                 },
             )
             background = UIUtil.getPanelBackground()
+            moves?.let { revealOnHover(this, it, open) }
         }
     }
 
@@ -413,6 +421,7 @@ class TransformFormPanel(
             add(JBLabel(if (open) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight))
             if (lead.isNotEmpty()) add(JBLabel(lead).apply { foreground = UIUtil.getContextHelpForeground() })
             add(JBLabel(step.title).apply { toolTipText = TransformCatalog[node.string("type")]?.label })
+            moves?.let(::add)
         }
         val names = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
             isOpaque = false
@@ -495,13 +504,13 @@ class TransformFormPanel(
                     addToCenter(BorderLayoutPanel().apply { isOpaque = false; border = JBUI.Borders.emptyLeft(6); addToCenter(test) })
                 },
             )
-            moves?.let(::addToRight)
             isOpaque = true
             background = UIUtil.getPanelBackground()
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             addMouseListener(object : MouseAdapter() {
                 override fun mouseClicked(e: MouseEvent) = onClick()
             })
+            moves?.let { revealOnHover(this, it, open) }
         }
     }
 
@@ -574,6 +583,31 @@ class TransformFormPanel(
         preferredSize = size
         minimumSize = size
         parent?.revalidate()
+    }
+
+    /**
+     * Shows a step's move arrows only while the pointer is over its row, or while the step is open. [moves] keeps its
+     * size either way; only the arrows inside it come and go.
+     */
+    private fun revealOnHover(row: JComponent, moves: JComponent, open: Boolean) {
+        val arrows = moves.getComponent(0)
+        arrows.isVisible = open
+        if (open) return
+        val tracker = object : MouseAdapter() {
+            // Moving onto a child leaves the row, so check where the pointer really is.
+            override fun mouseEntered(e: MouseEvent) = update()
+            override fun mouseExited(e: MouseEvent) = update()
+
+            fun update() {
+                arrows.isVisible = row.getMousePosition(true) != null
+            }
+        }
+        // Children that handle the mouse themselves (fields, dropdowns, tooltips) don't pass their exits on, so each is told.
+        fun listen(component: java.awt.Component) {
+            component.addMouseListener(tracker)
+            (component as? java.awt.Container)?.components?.forEach(::listen)
+        }
+        listen(row)
     }
 
     /** A plain value, edited where it sits, with the value it contributes on the right. */
