@@ -403,11 +403,11 @@ class TransformFormPanel(
             "accountAttribute" -> {
                 // Whichever way the transform names its source is the one edited; only display names are offered.
                 val key = SOURCE_KEYS.firstOrNull { attributes.has(it) } ?: "sourceName"
-                val attribute = nameCombo(attributes.string("attributeName").orEmpty(), "attribute") {
+                val attribute = nameCombo(attributes.string("attributeName").orEmpty(), "attribute", ATTRIBUTE_SCALE) {
                     attributes.addProperty("attributeName", it)
                     changed()
                 }
-                val source = nameCombo(attributes.string(key).orEmpty(), "source") { typed ->
+                val source = nameCombo(attributes.string(key).orEmpty(), "source", SOURCE_SCALE) { typed ->
                     attributes.addProperty(key, typed)
                     changed()
                     if (key == "sourceName") {
@@ -427,7 +427,7 @@ class TransformFormPanel(
                 names.add(attribute)
             }
             "identityAttribute" -> names.add(
-                nameCombo(attributes.string("name").orEmpty(), "attribute") { attributes.addProperty("name", it); changed() }
+                nameCombo(attributes.string("name").orEmpty(), "attribute", ATTRIBUTE_SCALE) { attributes.addProperty("name", it); changed() }
                     .also { combo -> tenant?.identityAttributes { combo.offer(it) } },
             )
             "getReferenceIdentityAttribute" -> {
@@ -436,7 +436,7 @@ class TransformFormPanel(
                         .also { it.offer(listOf("manager")) },
                 )
                 names.add(
-                    nameCombo(attributes.string("attributeName").orEmpty(), "attribute") { attributes.addProperty("attributeName", it); changed() }
+                    nameCombo(attributes.string("attributeName").orEmpty(), "attribute", ATTRIBUTE_SCALE) { attributes.addProperty("attributeName", it); changed() }
                         .also { combo -> tenant?.identityAttributes { combo.offer(it) } },
                 )
             }
@@ -488,9 +488,11 @@ class TransformFormPanel(
     }
 
     /** An editable dropdown of names; typing a name that isn't offered is fine, the list is only a help. */
-    private fun nameCombo(initial: String, placeholder: String, onEdit: (String) -> Unit): ComboBox<String> =
+    /** [scale] widens a dropdown beyond what its names need, for the ones that matter most on the row. */
+    private fun nameCombo(initial: String, placeholder: String, scale: Float = 1f, onEdit: (String) -> Unit): ComboBox<String> =
         ComboBox<String>().apply {
             isEditable = true
+            putClientProperty(WIDTH_SCALE, scale)
             val field = editor.editorComponent as? JTextField
             field?.text = initial
             (field as? JBTextField)?.emptyText?.text = placeholder
@@ -548,7 +550,8 @@ class TransformFormPanel(
         val text = if (widths.isEmpty()) 0 else widths[((widths.size - 1) * FIT_SHARE).toInt()]
         // The arrow button and the field's own insets come on top of the text.
         val chrome = JBUI.scale(ARROW_AND_INSETS)
-        val width = (text + chrome).coerceIn(JBUI.scale(MIN_NAME_WIDTH), JBUI.scale(MAX_NAME_WIDTH))
+        val scale = getClientProperty(WIDTH_SCALE) as? Float ?: 1f
+        val width = ((text + chrome).coerceIn(JBUI.scale(MIN_NAME_WIDTH), JBUI.scale(MAX_NAME_WIDTH)) * scale).toInt()
         val size = Dimension(width, preferredSize.height)
         preferredSize = size
         minimumSize = size
@@ -871,6 +874,9 @@ class TransformFormPanel(
     private companion object {
         val SOURCE_KEYS = listOf("sourceName", "applicationName", "applicationId")
         const val OFFERING = "sailpoint.transform.offering"
+        const val WIDTH_SCALE = "sailpoint.transform.widthScale"
+        const val SOURCE_SCALE = 1.25f
+        const val ATTRIBUTE_SCALE = 2f
         const val MIN_NAME_WIDTH = 90
         const val MAX_NAME_WIDTH = 220
         const val ARROW_AND_INSETS = 36
