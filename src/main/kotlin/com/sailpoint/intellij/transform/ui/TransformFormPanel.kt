@@ -237,9 +237,10 @@ class TransformFormPanel(
         }
         // What flows in, then the variables, then the template or values that use them — so a static's value is last.
         input.forEach(::show)
-        attributes.keySet().filter { it != "input" && (op?.isVariable(it) ?: false) }.forEach { name ->
-            slot(attributes, name, "\$$name", path, indent, removable = true)
-        }
+        val variables = attributes.keySet().filter { it != "input" && (op?.isVariable(it) ?: false) }
+        variables.forEach { name -> slot(attributes, name, "\$$name", path, indent, removable = true) }
+        // Variables are only offered where a template could use them, or where the transform already has some.
+        if (op?.type == "static" || op?.type == "conditional" || variables.isNotEmpty()) rows.add(addVariable(attributes, indent))
         others.forEach(::show)
     }
 
@@ -288,6 +289,21 @@ class TransformFormPanel(
             ),
         )
     }
+
+    /** Adds a variable below the others, above the template that uses them. */
+    private fun addVariable(attributes: JsonObject, indent: Int): JComponent = panel {
+        row {
+            link("Add variable") { _ ->
+                val name = Messages.showInputDialog(
+                    this@TransformFormPanel.component, "Name, as a template refers to it without the \$:", "Add Variable", null,
+                )?.trim()?.takeIf { it.isNotEmpty() } ?: return@link
+                attributes.addProperty(name, "")
+                // The JSON reads the same way as the form: variables first, the template after them.
+                attributes.remove("value")?.let { attributes.add("value", it) }
+                changed(structural = true)
+            }
+        }
+    }.apply { border = JBUI.Borders.empty(2, indentOf(indent) + ARROW_WIDTH, 2, 8) }
 
     private fun addStep(): JComponent = panel {
         row {
@@ -603,23 +619,9 @@ class TransformFormPanel(
                     else -> setting(attributes, attr)
                 }
             }
-            // Variables are only offered where a template could use them, or where the transform already has some.
-            val takesVariables = op?.type == "static" || op?.type == "conditional" ||
-                attributes.keySet().any { it != "input" && op?.isVariable(it) == true }
             val canRemove = remove != null || (chained && (path.isNotEmpty() || attributes.get("input").isTransform()))
-            if (takesVariables || canRemove) {
+            if (canRemove) {
                 row {
-                    if (takesVariables) {
-                        link("Add variable") { _ ->
-                            val name = Messages.showInputDialog(
-                                this@TransformFormPanel.component, "Name, as a template refers to it without the \$:", "Add Variable", null,
-                            )?.trim()?.takeIf { it.isNotEmpty() } ?: return@link
-                            attributes.addProperty(name, "")
-                            // The JSON reads the same way as the form: variables first, the template after them.
-                            attributes.remove("value")?.let { attributes.add("value", it) }
-                            changed(structural = true)
-                        }
-                    }
                     if (remove != null) link("Plain value") { _ -> remove() }
                     else if (canRemove) link("Remove step") { _ -> removeStep(path) }
                 }
