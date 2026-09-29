@@ -223,22 +223,24 @@ class TransformFormPanel(
 
     /** The values feeding an operation: its list entries, its other inputs, and any Velocity variables. */
     private fun branches(attributes: JsonObject, op: OpDef?, path: String, indent: Int, chained: Boolean) {
-        op?.attributes?.forEach { attr ->
-            when {
-                attr.name == "input" && chained -> Unit
-                attr.kind == AttrKind.VALUE -> slot(attributes, attr.name, attr.label, path, indent, removable = false)
-                attr.kind == AttrKind.VALUE_LIST || attr.kind == AttrKind.STRING_LIST -> {
-                    val list = attributes.list(attr.name)
-                    list.forEachIndexed { index, _ ->
-                        item(list, index, attr, path, indent)
-                    }
+        val (input, others) = op?.attributes.orEmpty().partition { it.name == "input" }
+        fun show(attr: AttrDef) = when {
+            attr.name == "input" && chained -> Unit
+            attr.kind == AttrKind.VALUE -> slot(attributes, attr.name, attr.label, path, indent, removable = false)
+            attr.kind == AttrKind.VALUE_LIST || attr.kind == AttrKind.STRING_LIST -> {
+                val list = attributes.list(attr.name)
+                list.forEachIndexed { index, _ ->
+                    item(list, index, attr, path, indent)
                 }
-                else -> Unit
             }
+            else -> Unit
         }
+        // What flows in, then the variables, then the template or values that use them — so a static's value is last.
+        input.forEach(::show)
         attributes.keySet().filter { it != "input" && (op?.isVariable(it) ?: false) }.forEach { name ->
             slot(attributes, name, "\$$name", path, indent, removable = true)
         }
+        others.forEach(::show)
     }
 
     /** An attribute that holds either a plain value, edited in place, or a whole transform of its own. */
@@ -613,6 +615,8 @@ class TransformFormPanel(
                                 this@TransformFormPanel.component, "Name, as a template refers to it without the \$:", "Add Variable", null,
                             )?.trim()?.takeIf { it.isNotEmpty() } ?: return@link
                             attributes.addProperty(name, "")
+                            // The JSON reads the same way as the form: variables first, the template after them.
+                            attributes.remove("value")?.let { attributes.add("value", it) }
                             changed(structural = true)
                         }
                     }
