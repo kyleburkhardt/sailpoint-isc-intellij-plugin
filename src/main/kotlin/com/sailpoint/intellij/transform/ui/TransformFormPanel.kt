@@ -42,6 +42,7 @@ import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Rectangle
 import java.awt.FlowLayout
+import java.awt.GridBagLayout
 import java.awt.GridLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -49,11 +50,15 @@ import javax.swing.JComponent
 import javax.swing.DefaultComboBoxModel
 import javax.swing.Icon
 import javax.swing.JPanel
+import javax.swing.JScrollPane
 import javax.swing.JTextField
 import javax.swing.Scrollable
 import javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
 import javax.swing.ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
 import javax.swing.event.DocumentEvent
+import javax.swing.event.PopupMenuEvent
+import javax.swing.event.PopupMenuListener
+import javax.swing.plaf.basic.BasicComboPopup
 import javax.swing.table.DefaultTableModel
 
 /**
@@ -343,7 +348,10 @@ class TransformFormPanel(
             if (lead.isNotEmpty()) add(JBLabel(lead).apply { foreground = UIUtil.getContextHelpForeground() })
             add(JBLabel(step.title).apply { toolTipText = TransformCatalog[node.string("type")]?.label })
         }
-        val names = JPanel(GridLayout(1, 0, JBUI.scale(4), 0)).apply { isOpaque = false }
+        val names = JPanel(GridLayout(1, 0, JBUI.scale(4), 0)).apply {
+            isOpaque = false
+            border = JBUI.Borders.emptyLeft(4)
+        }
         when (node.string("type")) {
             "accountAttribute" -> {
                 // Whichever way the transform names its source is the one edited; only display names are offered.
@@ -355,7 +363,14 @@ class TransformFormPanel(
                 val source = nameCombo(attributes.string(key).orEmpty(), "source") { typed ->
                     attributes.addProperty(key, typed)
                     changed()
-                    if (key == "sourceName") tenant?.accountAttributes(typed) { attribute.offer(it) }
+                    if (key == "sourceName") {
+                        tenant?.accountAttributes(typed) { offered ->
+                            // Only for the source still chosen when the names arrive, and only once it's a known one.
+                            if (attributes.string(key) != typed) return@accountAttributes
+                            attribute.offer(offered)
+                            if (offered.isNotEmpty() && attributes.string("attributeName").orEmpty() !in offered) attribute.clear()
+                        }
+                    }
                 }
                 if (key == "sourceName") {
                     tenant?.sources { source.offer(it) }
@@ -382,7 +397,6 @@ class TransformFormPanel(
 
         val test = JBTextField().apply {
             emptyText.text = "test value"
-            columns = 7
         }
         var syncing = false
         test.document.addDocumentListener(object : DocumentAdapter() {
@@ -407,9 +421,15 @@ class TransformFormPanel(
 
         return BorderLayoutPanel().apply {
             border = JBUI.Borders.empty(2, indentOf(indent), 2, 8)
-            addToLeft(left)
-            addToCenter(names)
-            addToRight(BorderLayoutPanel().apply { isOpaque = false; border = JBUI.Borders.emptyLeft(6); addToCenter(test) })
+            // The title sits level with the dropdowns rather than at the top of the row.
+            addToLeft(JPanel(GridBagLayout()).apply { isOpaque = false; add(left) })
+            addToCenter(
+                BorderLayoutPanel().apply {
+                    isOpaque = false
+                    addToLeft(names)
+                    addToCenter(BorderLayoutPanel().apply { isOpaque = false; border = JBUI.Borders.emptyLeft(6); addToCenter(test) })
+                },
+            )
             isOpaque = true
             background = UIUtil.getPanelBackground()
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
@@ -427,7 +447,22 @@ class TransformFormPanel(
             field?.text = initial
             (field as? JBTextField)?.emptyText?.text = placeholder
             toolTipText = initial.ifEmpty { null }
-            minimumSize = JBUI.size(40, preferredSize.height)
+            val narrow = Dimension(JBUI.scale(NAME_WIDTH), preferredSize.height)
+            preferredSize = narrow
+            minimumSize = narrow
+            addPopupMenuListener(object : PopupMenuListener {
+                // The dropdown itself is narrow; its list is as wide as the names in it.
+                override fun popupMenuWillBecomeVisible(e: PopupMenuEvent) {
+                    val popup = ui.getAccessibleChild(this@apply, 0) as? BasicComboPopup ?: return
+                    val scroller = UIUtil.findComponentOfType(popup, JScrollPane::class.java) ?: return
+                    val width = maxOf(this@apply.width, popup.list.preferredSize.width + JBUI.scale(24))
+                    scroller.preferredSize = Dimension(width, scroller.preferredSize.height)
+                    scroller.maximumSize = scroller.preferredSize
+                }
+
+                override fun popupMenuWillBecomeInvisible(e: PopupMenuEvent) = Unit
+                override fun popupMenuCanceled(e: PopupMenuEvent) = Unit
+            })
             field?.document?.addDocumentListener(object : DocumentAdapter() {
                 override fun textChanged(e: DocumentEvent) {
                     if (getClientProperty(OFFERING) == true) return
@@ -436,6 +471,11 @@ class TransformFormPanel(
                 }
             })
         }
+
+    /** Empties a dropdown, which clears the attribute it edits. */
+    private fun ComboBox<String>.clear() {
+        (editor.editorComponent as? JTextField)?.text = ""
+    }
 
     /** Replaces the names a dropdown offers, keeping what's typed in it. */
     private fun ComboBox<String>.offer(names: List<String>) {
@@ -745,6 +785,7 @@ class TransformFormPanel(
     private companion object {
         val SOURCE_KEYS = listOf("sourceName", "applicationName", "applicationId")
         const val OFFERING = "sailpoint.transform.offering"
+        const val NAME_WIDTH = 96
         val TENANT_STEPS = mapOf(
             "accountAttribute" to TenantStep("Account", SOURCE_KEYS.toSet() + "attributeName"),
             "identityAttribute" to TenantStep("Identity", setOf("name")),
