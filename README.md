@@ -37,12 +37,24 @@ Right-click for what fits each item:
 - **Edit Schedule…** (in a schedule's banner): build aggregation schedules by picking days and times, without writing cron. The plugin converts between the tenant's time zone and the UTC cron that ISC stores, and you can still edit the cron directly.
 - **New Source…** (on Sources): search the tenant's connectors. This is the first step of a guided New Source form that's still being built.
 
-Transforms get JSON Schema completion and validation while you edit.
+### Transforms
+
+A transform opens on a form, with its JSON beside it. Both edit the same document, so you can use either and push the result.
+
+- **Steps in order:** the form lists the steps in the order they run, and shows what each one produces for your test values as you type. Hover over a step to move it up or down, or click it to change its operation and settings.
+- **Tenant lookups:** account, identity and reference steps pick their source and attribute from dropdowns filled from your tenant. The test value to preview with sits on the same line.
+- **Local preview:** runs in the plugin. It covers the common operations: concatenation, conditional, first valid, join, lookup, lower and upper, replace, split, static, substring, trim, the account, identity and reference attributes, UUID and the random generators. The others show "not previewed yet" for now.
+- **Test in ISC…** (in the banner): runs the transform as it is in the editor, unpushed edits included, on a real identity through ISC's identity profile preview. Nothing is saved. ISC's answer shows under the local one, and is flagged when they disagree.
+
+The JSON side has schema completion and validation while you edit.
 
 ## Requirements
 
 - IntelliJ IDEA **2026.2 or newer** (build 262+), or another JetBrains IDE of the same version such as PyCharm or WebStorm. The free tier works.
 - An ISC tenant and a **Personal Access Token** (PAT) for a user with the admin rights for what you want to change, such as a source admin or an org admin. Reading the tenant's time zone for the schedule editor needs org admin (`idn:org-configs:read`). Without it, schedule times are shown in UTC.
+- **For transforms:**
+  - **Test in ISC** needs `idn:identity-profile:manage`, which ISC requires for its identity profile preview.
+  - **The identity attribute dropdown** needs `idn:identity-profile-attribute:read`. Without it, you type the attribute name yourself.
 
 ## Install
 
