@@ -2,7 +2,7 @@
 
 This file carries the full plan, the decisions behind it and where things stand, so work can resume from here without any earlier conversation. Keep it current: tick items off, and add decisions when they're made.
 
-_Last updated: 2026-09-18._
+_Last updated: 2026-09-29._
 
 ## Conventions and decisions (don't reopen these)
 
@@ -10,6 +10,7 @@ _Last updated: 2026-09-18._
 - Use only the per-service APIs: `/{service}/v1` (or a newer version of that service, e.g. `/sources/v2/…/provisioning-policies`). **Never** v3, beta or the yearly v2024–v2026 APIs, which SailPoint is retiring (supported until Q2 2028).
 - Look endpoints up in the per-service specs at `github.com/sailpoint-oss/api-specs` under `idn/apis/<service>/openapi.yaml`, not the combined `sailpoint-api.v20xx.yaml` bundles. Check each endpoint's `limit` maximum (some are 50) and whether it needs `X-SailPoint-Experimental: true`.
 - If a newer version of a service is only available as experimental, point that out and let the user choose. Provisioning policies use **experimental v2** by the user's choice, because v1 allows only one policy per usage type.
+- **SailPoint docs index:** `https://developer.sailpoint.com/llms.txt` lists every docs page, and each link returns raw markdown. ISC API pages are one endpoint each, as OpenAPI YAML (e.g. `/docs/api/get-source-v-1.md`), and transform operations live under `/docs/extensibility/transforms/operations/<op>.md`. Grep the index, then curl the page.
 - `/connector-groups` (v1 and beta) is a **private route**: ISC rejects our token with a 401 ("cannot be accessed using external token"). Don't use it.
 
 **Schedules and time zones**
@@ -54,6 +55,8 @@ Source
 | `run` | `SourceRunner` (Run menu actions), `TaskTracker` (polls `/task-status/v1`), `PeekDialog`, `Notifier` |
 | `schedule` | `CronSchedule` (cron model, UTC shifting; unit tested), `ScheduleBuilder` (point-and-click editor kept in sync with the cron), `ScheduleTimeZone`, `EditScheduleDialog` |
 | `schema` | JSON Schema completion for transforms |
+| `transform` | The local preview engine: `TransformCatalog` (reads `transform.schema.json` once for the form, New Transform and completion), `TransformEvaluator` (runs a transform, lists the tenant values it needs, `readsImplicitInput`/`withImplicitInput`), `Velocity`, and `ops/` (one file per group of operations) |
+| `transform/ui` | The transform editor: `TransformFormEditorProvider` (split view, form left at 66%), `TransformFormPanel` (steps, settings, previews), `TestInputPanel`, `TenantNames` (source and attribute names for dropdowns, cached per tenant), `IscTest` and `IscTestDialog` (Test in ISC) |
 | `settings` | Tenants, stored credentials, settings page |
 
 ## Status
@@ -73,9 +76,10 @@ Source
 
 - [x] **v0.1.0 released** 2026-09-18: the zip is on the [GitHub Release](https://github.com/kyleburkhardt/sailpoint-isc-intellij-plugin/releases/tag/v0.1.0), and the update feed `https://kyleburkhardt.github.io/sailpoint-isc-intellij-plugin/updatePlugins.xml` is live and points at it.
 
+- [x] **PR #2** (this plan) and **PR #3** (phase 3) merged 2026-09-18.
+
 ### In progress
-- [ ] **PR #2:** this plan (`docs/PLAN.md`) onto `master`.
-- [ ] **PR #3:** phase 3 (see below). Built and passing locally; not yet tried on a live tenant.
+- [ ] **Transform editor** (branch `transform-editor`): a form-first editor with a live local preview, next to the JSON. See "Transform editor" below.
 - [ ] **Repo settings suggested but not applied:**
   - Make `build` (and `analyze`) required checks in the ruleset.
   - Turn on **Automatically delete head branches** and **Always suggest updating pull request branches**.
@@ -90,6 +94,12 @@ Source
 - [ ] **Connector checks:** Test Connection on a good and a broken source; check what Show details gives.
 - [ ] **Peek:** on `account` and on an entitlement type.
 - [ ] **CSV aggregation:** Aggregate Accounts from File on a delimited-file source. This is the first real multipart upload.
+- [ ] **Test in ISC** (transform banner): the first run settles
+  - whether the client has `idn:identity-profile:manage`;
+  - whether "Compute as" accepts any identity attribute or only mapped ones;
+  - that the identity search (`/search/v1`, `name*`) finds people;
+  - how a `reference` to another transform behaves.
+- [ ] **Transform dropdowns:** the source, account attribute and identity attribute lists fill from the tenant. `/identity-attributes/v1` needs `idn:identity-profile-attribute:read`.
 
 ## To do
 
@@ -126,8 +136,37 @@ Source
 - [ ] **Entitlements** inside each entitlement type folder: `/entitlements/v1?filters=source.id eq "…"`. Each entitlement also has a request config.
 - [ ] **Read-only views:** source health (`/sources/v1/{id}/source-health`) and connections (`/sources/v1/{id}/connections`).
 
+### Transform editor
+Built so far (2026-09-22 to 2026-09-29):
+- **Local preview engine:** there's no preview endpoint for a single transform, so transforms run locally, checked against SailPoint's documented examples.
+  - Operations covered:
+    - `concat`, `conditional`, `firstValid`, `join`, `lookup`, `lower`, `replace`, `split`, `static`, `substring`, `trim`, `upper`
+    - `identityAttribute`, `accountAttribute`, `getReferenceIdentityAttribute`
+    - `uuid`, `randomAlphaNumeric`, `randomNumeric`
+  - Anything else shows "not previewed yet".
+- **Form layout:**
+  - The steps are listed in the order they run, and each shows its result.
+  - Steps move up and down with arrows that appear on hover.
+  - Account, identity and reference steps have dropdowns filled from the tenant, with the test value on the same line.
+  - "Input" appears at the top only when the transform reads the value ISC passes in.
+  - A static's variables come before its value.
+- **Test in ISC:** runs the transform in the editor on a real identity through `POST /identity-profiles/v1/identity-preview`, which is stable v1 and saves nothing. The result shows under the local one, flagged when they disagree.
+
+To do:
+- [ ] **Phase B:** the remaining operations, which currently show "not previewed yet":
+  - base64 decode and encode
+  - date compare, date format, date math
+  - decompose diacritical marks, normalize names
+  - display name
+  - E.164 phone, ISO 3166, RFC 5646
+  - get end of string, index of, last index of
+  - left pad, right pad, replace all
+  - reference, rule
+  - username generator
+- [ ] **Phase C:** sample data from the tenant for test values, resolving `reference` in the local preview, and remembering test inputs and the Test in ISC setup between sessions (it's per open tab now).
+- [ ] Reordering entries inside a step (e.g. First Valid's values). Only the main chain moves now.
+
 ### Deferred (user's call to pick these up)
-- [ ] **Transforms:** New Transform should fill in the chosen type's required attributes from `transform.schema.json` instead of `attributes: {}` (22 of 37 types have required attributes). The user said "we will get to transforms later".
 - [ ] **Provisioning policy JSON schema:** completion and validation for `fields`, reusing the transform schema for each field's `transform`.
 
 ### Smaller known issues
