@@ -171,6 +171,31 @@ class TransformEvaluatorTest {
     }
 
     @Test
+    fun `an account attribute is asked for by source, then used once supplied`() {
+        val json = """{"type":"lower","attributes":{"input":
+            {"type":"accountAttribute","attributes":{"sourceName":"Workday","attributeName":"DEPARTMENT"}}}}"""
+        assertEquals(NeededInput(NeedKind.ACCOUNT_ATTRIBUTE, "DEPARTMENT", "Workday"), (output(json) as EvalResult.Needs).need)
+        assertEquals(listOf(NeededInput(NeedKind.ACCOUNT_ATTRIBUTE, "DEPARTMENT", "Workday")), neededInputs(transform(json)))
+        val supplied = EvalContext(accountAttributes = mapOf("Workday" to mapOf("DEPARTMENT" to "Engineering")))
+        assertEquals("engineering", (output(json, context = supplied) as EvalResult.Value).text)
+    }
+
+    @Test
+    fun `an account attribute can name its source by application name`() {
+        val json = """{"type":"accountAttribute","attributes":{"applicationName":"AD [source]","attributeName":"mail"}}"""
+        val supplied = EvalContext(accountAttributes = mapOf("AD [source]" to mapOf("mail" to "a@b.c")))
+        assertEquals("a@b.c", (output(json, context = supplied) as EvalResult.Value).text)
+    }
+
+    @Test
+    fun `a reference identity attribute is asked for by uid`() {
+        val json = """{"type":"getReferenceIdentityAttribute","attributes":{"uid":"manager","attributeName":"email"}}"""
+        assertEquals(NeededInput(NeedKind.REFERENCE_IDENTITY_ATTRIBUTE, "email", "manager"), (output(json) as EvalResult.Needs).need)
+        val supplied = EvalContext(referenceAttributes = mapOf("manager" to mapOf("email" to "boss@example.com")))
+        assertEquals("boss@example.com", (output(json, context = supplied) as EvalResult.Value).text)
+    }
+
+    @Test
     fun `an operation that isn't previewed yet says so`() {
         assertTrue(failure("""{"type":"dateMath","attributes":{"expression":"now"}}""").contains("isn't previewed yet"))
         assertTrue(failure("""{"type":"nonsense"}""").contains("isn't a transform operation"))

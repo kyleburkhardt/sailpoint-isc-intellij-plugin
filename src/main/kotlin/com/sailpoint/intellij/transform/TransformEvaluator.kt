@@ -3,6 +3,7 @@ package com.sailpoint.intellij.transform
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.sailpoint.intellij.api.string
+import com.sailpoint.intellij.transform.ops.TenantOps
 import java.time.Instant
 import kotlin.random.Random
 
@@ -256,7 +257,7 @@ private fun needOf(node: JsonObject): NeededInput? {
     return when (node.string("type")) {
         "identityAttribute" -> attributes.string("name")?.let { NeededInput(NeedKind.IDENTITY_ATTRIBUTE, it) }
         "accountAttribute" -> attributes.string("attributeName")?.let {
-            NeededInput(NeedKind.ACCOUNT_ATTRIBUTE, it, attributes.string("sourceName") ?: attributes.string("applicationId"))
+            NeededInput(NeedKind.ACCOUNT_ATTRIBUTE, it, TenantOps.accountSource(attributes))
         }
         "getReferenceIdentityAttribute" -> attributes.string("attributeName")?.let {
             NeededInput(NeedKind.REFERENCE_IDENTITY_ATTRIBUTE, it, attributes.string("uid"))

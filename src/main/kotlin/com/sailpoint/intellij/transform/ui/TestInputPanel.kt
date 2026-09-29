@@ -4,6 +4,7 @@ import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.LabelPosition
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.ui.JBUI
 import com.sailpoint.intellij.transform.EvalContext
@@ -68,23 +69,32 @@ class TestInputPanel(private val onChange: () -> Unit) {
 
     private fun form(): DialogPanel = panel {
         if (readsInput) {
-            row("Input value:") {
+            row("Input:") {
                 cell(field(incoming) { incoming = it }).align(AlignX.FILL)
-                    .comment("The attribute value ISC passes into the transform.")
+                    .applyToComponent { toolTipText = "The attribute value ISC passes into the transform." }
             }
-        } else {
-            row { comment("This transform doesn't use the value ISC passes in.") }
         }
         // Only the operations that read tenant data ask for anything, and only for what they actually reference.
         needs.filter { it.kind.asksForAValue }.forEach { need ->
-            row("${need.label}:") {
+            row {
+                // Above the field, so a long source name doesn't squeeze it.
                 cell(field(values[need].orEmpty()) { values[need] = it }).align(AlignX.FILL)
+                    .label("${need.shortLabel}:", LabelPosition.TOP)
+                    .applyToComponent { toolTipText = need.label }
             }
         }
         needs.filterNot { it.kind.asksForAValue }.forEach { need ->
             row { comment(need.prompt) }
         }
-    }.apply { border = JBUI.Borders.empty(8, 8, 4, 8) }
+    }.apply { border = JBUI.Borders.empty(4, 8, 0, 8) }
+
+    /** A field label short enough to sit beside its field: the attribute, and where it comes from if not the identity. */
+    private val NeededInput.shortLabel: String
+        get() = when (kind) {
+            NeedKind.ACCOUNT_ATTRIBUTE -> qualifier?.let { "$it › $name" } ?: name
+            NeedKind.REFERENCE_IDENTITY_ATTRIBUTE -> qualifier?.let { "$it › $name" } ?: name
+            else -> name
+        }
 
     private fun field(initial: String, onEdit: (String) -> Unit) = JBTextField(initial).apply {
         document.addDocumentListener(object : DocumentAdapter() {

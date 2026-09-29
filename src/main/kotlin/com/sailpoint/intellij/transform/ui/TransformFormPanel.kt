@@ -12,7 +12,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.TitledSeparator
 import com.intellij.ui.ToolbarDecorator
-import com.intellij.ui.components.ActionLink
+import com.intellij.ui.InplaceButton
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
@@ -20,6 +20,7 @@ import com.intellij.ui.components.JBTextField
 import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
+import com.intellij.ui.dsl.builder.Row
 import com.intellij.ui.dsl.builder.columns
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.table.JBTable
@@ -38,11 +39,17 @@ import com.sailpoint.intellij.transform.evaluate
 import com.sailpoint.intellij.transform.neededInputs
 import com.sailpoint.intellij.transform.readsImplicitInput
 import java.awt.Cursor
+import java.awt.Dimension
+import java.awt.Rectangle
 import java.awt.FlowLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.JComponent
+import javax.swing.Icon
 import javax.swing.JPanel
+import javax.swing.Scrollable
+import javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+import javax.swing.ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
 import javax.swing.event.DocumentEvent
 import javax.swing.table.DefaultTableModel
 
@@ -56,13 +63,21 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
         private set
 
     private val inputs = TestInputPanel { refresh() }
-    private val rows = JPanel(VerticalLayout(0))
+    private val rows = object : JPanel(VerticalLayout(0)), Scrollable {
+        override fun getPreferredScrollableViewportSize(): Dimension = preferredSize
+        override fun getScrollableUnitIncrement(visible: Rectangle, orientation: Int, direction: Int) = JBUI.scale(16)
+        override fun getScrollableBlockIncrement(visible: Rectangle, orientation: Int, direction: Int) = visible.height
+        override fun getScrollableTracksViewportWidth() = true
+        override fun getScrollableTracksViewportHeight() = false
+    }
     private val updaters = mutableListOf<(Trace) -> Unit>()
 
     /** The one step whose settings are open, by its path; only one is open at a time. */
     private var opened: String? = null
 
-    val component: JComponent = JBScrollPane(rows).apply { border = JBUI.Borders.empty() }
+    val component: JComponent = JBScrollPane(rows, VERTICAL_SCROLLBAR_AS_NEEDED, HORIZONTAL_SCROLLBAR_NEVER).apply {
+        border = JBUI.Borders.empty()
+    }
 
     fun setModel(transform: JsonObject) {
         model = transform
@@ -126,6 +141,8 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
                 // ISC won't rename a transform that already exists, so this is shown rather than offered.
                 label(model.string("name").orEmpty())
             }
+        }
+        row {
             cell(
                 checkBox("Re-evaluate nightly", model.flag("requiresPeriodicRefresh")) {
                     model.addProperty("requiresPeriodicRefresh", it)
@@ -133,10 +150,10 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
                 },
             )
         }
-    }.apply { border = JBUI.Borders.empty(8, 8, 0, 8) }
+    }.apply { border = JBUI.Borders.empty(6, 8, 0, 8) }
 
     private fun divider(title: String): JComponent =
-        TitledSeparator(title).apply { border = JBUI.Borders.empty(8, 8, 0, 8) }
+        TitledSeparator(title).apply { border = JBUI.Borders.empty(4, 8, 0, 8) }
 
     /** One step of the chain: its number, what it does, and what it produced. */
     private fun step(node: JsonObject, path: String, number: Int) {
@@ -236,8 +253,7 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
 
     private fun addStep(): JComponent = panel {
         row {
-            link("Add a step") { _ -> appendStep() }
-            comment("Runs on whatever the steps above produced.")
+            link("Add step") { _ -> appendStep() }
         }
     }.apply { border = JBUI.Borders.empty(4, indentOf(0) + JBUI.scale(20), 4, 8) }
 
@@ -254,7 +270,7 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
 
     /** A clickable row: what it is on the left, what it produced on the right. */
     private fun row(indent: Int, lead: String, title: String, detail: String, path: String, open: Boolean, onClick: () -> Unit): JComponent {
-        val value = JBLabel()
+        val value = JBLabel().apply { border = JBUI.Borders.emptyLeft(8) }
         updaters += { trace -> show(value, trace.at(path)?.result) }
 
         val left = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0)).apply {
@@ -262,11 +278,16 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
             add(JBLabel(if (open) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight))
             add(JBLabel(lead).apply { foreground = UIUtil.getContextHelpForeground() })
             add(JBLabel(title))
-            if (detail.isNotEmpty()) add(JBLabel(detail).apply { foreground = UIUtil.getContextHelpForeground() })
+        }
+        val summary = JBLabel(detail).apply {
+            foreground = UIUtil.getContextHelpForeground()
+            toolTipText = detail.takeIf { it.isNotEmpty() }
+            minimumSize = JBUI.emptySize()
         }
         return BorderLayoutPanel().apply {
-            border = JBUI.Borders.empty(3, indentOf(indent), 3, 8)
-            addToCenter(left)
+            border = JBUI.Borders.empty(2, indentOf(indent), 2, 8)
+            addToLeft(left)
+            addToCenter(summary)
             addToRight(value)
             isOpaque = true
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
@@ -299,13 +320,13 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
         onRemove: (() -> Unit)?,
     ): JComponent {
         val field = textBox(value, onEdit)
-        val buttons = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0)).apply {
+        val buttons = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(2), 0)).apply {
             isOpaque = false
-            onTransform?.let { add(linkLabel("Use a transform") { it(field.text) }) }
-            onRemove?.let { add(linkLabel("Remove") { it() }) }
+            onTransform?.let { add(iconButton("Use a transform", AllIcons.Nodes.Function) { it(field.text) }) }
+            onRemove?.let { add(iconButton("Remove", AllIcons.Actions.Close) { it() }) }
         }
         return BorderLayoutPanel().apply {
-            border = JBUI.Borders.empty(3, indentOf(indent), 3, 8)
+            border = JBUI.Borders.empty(2, indentOf(indent) + ARROW_WIDTH, 2, 8)
             addToLeft(JBLabel(label).apply { border = JBUI.Borders.emptyRight(6) })
             addToCenter(field)
             addToRight(buttons)
@@ -315,9 +336,9 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
     /** Everything about one step that isn't on its row: the operation itself and its plainer settings. */
     private fun settings(node: JsonObject, attributes: JsonObject, op: OpDef?, path: String, chained: Boolean, remove: (() -> Unit)?): JComponent =
         panel {
-            row("Operation:") {
+            row {
                 cell(typeCombo(node, op))
-                op?.let { browserLink("What it does", it.docsUrl) }
+                op?.let { browserLink("Docs", it.docsUrl).applyToComponent { toolTipText = it.summary } }
             }
             op?.attributes?.forEach { attr ->
                 when (attr.kind) {
@@ -346,12 +367,12 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
                             changed(structural = true)
                         }
                     }
-                    if (remove != null) link("Use a plain value") { _ -> remove() }
-                    else if (canRemove) link("Remove this step") { _ -> removeStep(path) }
+                    if (remove != null) link("Plain value") { _ -> remove() }
+                    else if (canRemove) link("Remove step") { _ -> removeStep(path) }
                 }
             }
         }.apply {
-            border = JBUI.Borders.empty(4, indentOf(1) + JBUI.scale(20), 8, 8)
+            border = JBUI.Borders.empty(2, indentOf(1) + JBUI.scale(8), 6, 8)
         }
 
     private fun Panel.setting(attributes: JsonObject, attr: AttrDef) {
@@ -359,7 +380,7 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
         when (attr.kind) {
             AttrKind.BOOLEAN -> row {
                 cell(checkBox(label, attributes.flag(attr.name)) { attributes.addProperty(attr.name, it); changed() })
-                    .comment(attr.help)
+                help(attr)
             }
 
             AttrKind.ENUM -> row("$label:") {
@@ -368,7 +389,8 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
                         selectedItem = attributes.string(attr.name)
                         addActionListener { attributes.addProperty(attr.name, selectedItem as? String); changed() }
                     },
-                ).comment(attr.help)
+                )
+                help(attr)
             }
 
             AttrKind.INTEGER -> row("$label:") {
@@ -378,19 +400,26 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
                             ?: attributes.addProperty(attr.name, typed)
                         changed()
                     },
-                ).columns(8).comment(attr.help)
+                ).columns(6)
+                help(attr)
             }
 
             AttrKind.TABLE -> row("$label:") {
-                cell(table(attributes, attr.name)).align(AlignX.FILL).comment(attr.help)
+                cell(table(attributes, attr.name)).align(AlignX.FILL).resizableColumn()
+                help(attr)
             }
 
             else -> row("$label:") {
                 cell(textBox(attributes.string(attr.name).orEmpty()) { attributes.addProperty(attr.name, it); changed() })
                     .align(AlignX.FILL)
-                    .comment(attr.help)
+                    .resizableColumn()
+                help(attr)
             }
         }
+    }
+
+    private fun Row.help(attr: AttrDef) {
+        if (attr.help.isNotEmpty()) contextHelp(attr.help)
     }
 
     private fun typeCombo(node: JsonObject, current: OpDef?): ComboBox<OpDef> =
@@ -415,7 +444,7 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
         json.entrySet().forEach { (key, value) ->
             model.addRow(arrayOf<Any>(key, value.takeIf { it.isJsonPrimitive }?.asString.orEmpty()))
         }
-        val table = JBTable(model).apply { preferredScrollableViewportSize = JBUI.size(360, 110) }
+        val table = JBTable(model).apply { preferredScrollableViewportSize = JBUI.size(220, 100) }
         model.addTableModelListener {
             json.keySet().toList().forEach(json::remove)
             repeat(model.rowCount) { row ->
@@ -508,24 +537,34 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
     }
 
     private fun show(label: JBLabel, result: EvalResult?) {
+        label.icon = null
         when (result) {
-            null -> label.text = ""
+            null -> {
+                label.text = ""
+                label.toolTipText = null
+            }
             is EvalResult.Value -> {
-                label.text = result.text?.let { "\"$it\"" } ?: "nothing"
+                label.text = result.text?.let { "\"${clip(it)}\"" } ?: "nothing"
+                label.toolTipText = result.text?.takeIf { it.length > VALUE_LENGTH }
                 label.foreground = if (result.text == null) UIUtil.getContextHelpForeground() else UIUtil.getLabelForeground()
             }
             is EvalResult.Needs -> {
-                label.text = result.need.prompt
+                label.text = "needs a value"
+                label.toolTipText = result.need.prompt
                 label.foreground = UIUtil.getContextHelpForeground()
             }
             is EvalResult.Failure -> {
-                label.text = result.message
+                label.text = clip(result.message)
+                label.icon = AllIcons.General.Error
+                label.toolTipText = result.message
                 label.foreground = JBColor.RED
             }
         }
     }
 
-    private fun linkLabel(text: String, onClick: () -> Unit) = ActionLink(text) { onClick() }
+    private fun clip(text: String): String = if (text.length > VALUE_LENGTH) text.take(VALUE_LENGTH - 1) + "…" else text
+
+    private fun iconButton(tooltip: String, icon: Icon, onClick: () -> Unit) = InplaceButton(tooltip, icon) { onClick() }
 
     private fun checkBox(text: String, selected: Boolean, onToggle: (Boolean) -> Unit) = JBCheckBox(text, selected).apply {
         addActionListener { onToggle(isSelected) }
@@ -560,6 +599,8 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
     private val hover: JBColor get() = JBColor.namedColor("Table.stripeColor", JBColor(0xF5F5F5, 0x3C3F41))
 
     private companion object {
-        const val SUMMARY_LENGTH = 60
+        const val SUMMARY_LENGTH = 40
+        const val VALUE_LENGTH = 24
+        val ARROW_WIDTH: Int get() = AllIcons.General.ArrowRight.iconWidth + JBUI.scale(6)
     }
 }
