@@ -4,7 +4,6 @@ import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
-import com.intellij.ui.dsl.builder.LabelPosition
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.ui.JBUI
 import com.sailpoint.intellij.transform.EvalContext
@@ -16,8 +15,8 @@ import javax.swing.JPanel
 import javax.swing.event.DocumentEvent
 
 /**
- * The values a preview runs against: the attribute flowing in, and one field for every tenant value the transform
- * reads. The fields follow what the transform references, so there's nothing to set up by hand.
+ * The values a preview runs against: the attribute flowing in, and the tenant values the transform reads. Only the
+ * incoming value has a field here; each tenant value is typed on the step that reads it.
  */
 class TestInputPanel(private val onChange: () -> Unit) {
 
@@ -44,6 +43,14 @@ class TestInputPanel(private val onChange: () -> Unit) {
         this.readsInput = readsInput
         values.keys.retainAll(needed.toSet())
         rebuild()
+    }
+
+    /** The test value typed for [need], on its step's row. */
+    fun value(need: NeededInput): String = values[need].orEmpty()
+
+    fun set(need: NeededInput, value: String) {
+        values[need] = value
+        onChange()
     }
 
     fun context(): EvalContext = EvalContext(
@@ -74,27 +81,11 @@ class TestInputPanel(private val onChange: () -> Unit) {
                     .applyToComponent { toolTipText = "The attribute value ISC passes into the transform." }
             }
         }
-        // Only the operations that read tenant data ask for anything, and only for what they actually reference.
-        needs.filter { it.kind.asksForAValue }.forEach { need ->
-            row {
-                // Above the field, so a long source name doesn't squeeze it.
-                cell(field(values[need].orEmpty()) { values[need] = it }).align(AlignX.FILL)
-                    .label("${need.shortLabel}:", LabelPosition.TOP)
-                    .applyToComponent { toolTipText = need.label }
-            }
-        }
+        // Tenant values are typed on their own steps; only what can't be typed anywhere is mentioned here.
         needs.filterNot { it.kind.asksForAValue }.forEach { need ->
             row { comment(need.prompt) }
         }
     }.apply { border = JBUI.Borders.empty(4, 8, 0, 8) }
-
-    /** A field label short enough to sit beside its field: the attribute, and where it comes from if not the identity. */
-    private val NeededInput.shortLabel: String
-        get() = when (kind) {
-            NeedKind.ACCOUNT_ATTRIBUTE -> qualifier?.let { "$it › $name" } ?: name
-            NeedKind.REFERENCE_IDENTITY_ATTRIBUTE -> qualifier?.let { "$it › $name" } ?: name
-            else -> name
-        }
 
     private fun field(initial: String, onEdit: (String) -> Unit) = JBTextField(initial).apply {
         document.addDocumentListener(object : DocumentAdapter() {

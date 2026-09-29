@@ -27,7 +27,7 @@ import javax.swing.JPanel
 class TransformFormEditor(private val project: Project, private val file: IscVirtualFile) : UserDataHolderBase(), FileEditor {
 
     private val document = FileDocumentManager.getInstance().getDocument(file)
-    private val form = TransformFormPanel(nameEditable = file.remoteId == null) { writeBack() }
+    private val form = TransformFormPanel(nameEditable = file.remoteId == null, IscTenantNames.of(file.tenantId)) { writeBack() }
     private val message = JBLabel().apply { border = JBUI.Borders.empty(12) }
     private val root = JPanel(BorderLayout())
     private val reload = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)

@@ -35,10 +35,14 @@ class TransformFormEditorProvider : FileEditorProvider, DumbAware {
         "SailPointTransform",
         Layout.SHOW_EDITOR_AND_PREVIEW,
     ) {
-        override fun createSplitter(): JBSplitter = object : JBSplitter(false, 0.5f, 0.15f, 0.85f) {
+        // The form gets two thirds of the width by default.
+        override fun createSplitter(): JBSplitter = object : JBSplitter(false, 0.66f, 0.15f, 0.85f) {
             override fun setFirstComponent(component: JComponent?) = super.setSecondComponent(component)
             override fun setSecondComponent(component: JComponent?) = super.setFirstComponent(component)
         }
+
+        // Its own key, so a width dragged here isn't shared with Markdown and other split editors, and theirs isn't used here.
+        override val splitterProportionKey: String = "SailPointTransform.SplitterProportion"
     }
 
     override fun getEditorTypeId(): String = "sailpoint-transform"

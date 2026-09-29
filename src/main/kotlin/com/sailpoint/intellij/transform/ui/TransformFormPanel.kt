@@ -42,11 +42,14 @@ import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Rectangle
 import java.awt.FlowLayout
+import java.awt.GridLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.JComponent
+import javax.swing.DefaultComboBoxModel
 import javax.swing.Icon
 import javax.swing.JPanel
+import javax.swing.JTextField
 import javax.swing.Scrollable
 import javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
 import javax.swing.ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
@@ -57,7 +60,12 @@ import javax.swing.table.DefaultTableModel
  * A transform as the steps it runs, top to bottom, with the value after each one down the right. Clicking a step opens
  * its settings underneath; everything else stays shut. The JSON behind it never appears.
  */
-class TransformFormPanel(private val nameEditable: Boolean, private val onModelChanged: () -> Unit) {
+class TransformFormPanel(
+    private val nameEditable: Boolean,
+    /** Where the dropdowns get source and attribute names; without it they're plain text. */
+    private val tenant: TenantNames? = null,
+    private val onModelChanged: () -> Unit,
+) {
 
     var model: JsonObject = JsonObject()
         private set
@@ -169,16 +177,22 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
         val attributes = node.attributes()
         val open = opened == path
 
+        val onClick = { opened = if (open) null else path; rebuild() }
+        val tenantStep = TENANT_STEPS[node.string("type")]
         rows.add(
-            row(
-                indent = indent,
-                lead = lead,
-                title = op?.label ?: node.string("type").orEmpty().ifEmpty { "Nothing yet" },
-                detail = summary(op, attributes),
-                path = path,
-                open = open,
-                onClick = { opened = if (open) null else path; rebuild() },
-            ),
+            if (tenantStep != null) {
+                tenantRow(node, attributes, tenantStep, indent, lead, path, open, onClick)
+            } else {
+                row(
+                    indent = indent,
+                    lead = lead,
+                    title = op?.label ?: node.string("type").orEmpty().ifEmpty { "Nothing yet" },
+                    detail = summary(op, attributes),
+                    path = path,
+                    open = open,
+                    onClick = onClick,
+                )
+            },
         )
         if (open) rows.add(settings(node, attributes, op, path, chained, remove))
         branches(attributes, op, path, indent + 1, chained)
@@ -231,9 +245,8 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
     private fun item(list: JsonArray, index: Int, attr: AttrDef, path: String, indent: Int) {
         val element = list.get(index)
         val childPath = TransformEvaluator.join(path, "${attr.name}[$index]")
-        val label = "${attr.label.trimEnd('s')} ${index + 1}:"
         if (element.isTransform()) {
-            operation(element.asJsonObject, childPath, indent, label, chained = false) {
+            operation(element.asJsonObject, childPath, indent, "", chained = false) {
                 list.set(index, JsonPrimitive(""))
                 changed(structural = true)
             }
@@ -242,7 +255,7 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
         rows.add(
             literal(
                 indent = indent,
-                label = label,
+                label = null,
                 value = element.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
                 onEdit = { list.set(index, JsonPrimitive(it)); changed() },
                 onTransform = if (attr.kind == AttrKind.VALUE_LIST) ({ list.set(index, staticOf(it)); changed(structural = true) }) else null,
@@ -276,7 +289,7 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
         val left = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0)).apply {
             isOpaque = false
             add(JBLabel(if (open) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight))
-            add(JBLabel(lead).apply { foreground = UIUtil.getContextHelpForeground() })
+            if (lead.isNotEmpty()) add(JBLabel(lead).apply { foreground = UIUtil.getContextHelpForeground() })
             add(JBLabel(title))
         }
         val summary = JBLabel(detail).apply {
@@ -310,10 +323,137 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
         }
     }
 
+    /**
+     * A step that reads from the tenant: its names as dropdowns on the row, and the test value to use for it where
+     * other rows show their result.
+     */
+    private fun tenantRow(
+        node: JsonObject,
+        attributes: JsonObject,
+        step: TenantStep,
+        indent: Int,
+        lead: String,
+        path: String,
+        open: Boolean,
+        onClick: () -> Unit,
+    ): JComponent {
+        val left = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0)).apply {
+            isOpaque = false
+            add(JBLabel(if (open) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight))
+            if (lead.isNotEmpty()) add(JBLabel(lead).apply { foreground = UIUtil.getContextHelpForeground() })
+            add(JBLabel(step.title).apply { toolTipText = TransformCatalog[node.string("type")]?.label })
+        }
+        val names = JPanel(GridLayout(1, 0, JBUI.scale(4), 0)).apply { isOpaque = false }
+        when (node.string("type")) {
+            "accountAttribute" -> {
+                // Whichever way the transform names its source is the one edited; only display names are offered.
+                val key = SOURCE_KEYS.firstOrNull { attributes.has(it) } ?: "sourceName"
+                val attribute = nameCombo(attributes.string("attributeName").orEmpty(), "attribute") {
+                    attributes.addProperty("attributeName", it)
+                    changed()
+                }
+                val source = nameCombo(attributes.string(key).orEmpty(), "source") { typed ->
+                    attributes.addProperty(key, typed)
+                    changed()
+                    if (key == "sourceName") tenant?.accountAttributes(typed) { attribute.offer(it) }
+                }
+                if (key == "sourceName") {
+                    tenant?.sources { source.offer(it) }
+                    attributes.string(key)?.let { name -> tenant?.accountAttributes(name) { attribute.offer(it) } }
+                }
+                names.add(source)
+                names.add(attribute)
+            }
+            "identityAttribute" -> names.add(
+                nameCombo(attributes.string("name").orEmpty(), "attribute") { attributes.addProperty("name", it); changed() }
+                    .also { combo -> tenant?.identityAttributes { combo.offer(it) } },
+            )
+            "getReferenceIdentityAttribute" -> {
+                names.add(
+                    nameCombo(attributes.string("uid").orEmpty(), "identity") { attributes.addProperty("uid", it); changed() }
+                        .also { it.offer(listOf("manager")) },
+                )
+                names.add(
+                    nameCombo(attributes.string("attributeName").orEmpty(), "attribute") { attributes.addProperty("attributeName", it); changed() }
+                        .also { combo -> tenant?.identityAttributes { combo.offer(it) } },
+                )
+            }
+        }
+
+        val test = JBTextField().apply {
+            emptyText.text = "test value"
+            columns = 7
+        }
+        var syncing = false
+        test.document.addDocumentListener(object : DocumentAdapter() {
+            override fun textChanged(e: DocumentEvent) {
+                if (syncing) return
+                neededInputs(node).firstOrNull()?.let { inputs.set(it, test.text) }
+            }
+        })
+        updaters += { trace ->
+            // The same value can be read in two places, so a field shows what was typed in the other.
+            val typed = neededInputs(node).firstOrNull()?.let(inputs::value).orEmpty()
+            if (!test.hasFocus() && test.text != typed) {
+                syncing = true
+                test.text = typed
+                syncing = false
+            }
+            val failure = trace.at(path)?.result as? EvalResult.Failure
+            test.putClientProperty("JComponent.outline", failure?.let { "error" })
+            test.toolTipText = failure?.message ?: "The value to preview with. ISC reads the real one from the tenant."
+            test.repaint()
+        }
+
+        return BorderLayoutPanel().apply {
+            border = JBUI.Borders.empty(2, indentOf(indent), 2, 8)
+            addToLeft(left)
+            addToCenter(names)
+            addToRight(BorderLayoutPanel().apply { isOpaque = false; border = JBUI.Borders.emptyLeft(6); addToCenter(test) })
+            isOpaque = true
+            background = UIUtil.getPanelBackground()
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+            addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(e: MouseEvent) = onClick()
+            })
+        }
+    }
+
+    /** An editable dropdown of names; typing a name that isn't offered is fine, the list is only a help. */
+    private fun nameCombo(initial: String, placeholder: String, onEdit: (String) -> Unit): ComboBox<String> =
+        ComboBox<String>().apply {
+            isEditable = true
+            val field = editor.editorComponent as? JTextField
+            field?.text = initial
+            (field as? JBTextField)?.emptyText?.text = placeholder
+            toolTipText = initial.ifEmpty { null }
+            minimumSize = JBUI.size(40, preferredSize.height)
+            field?.document?.addDocumentListener(object : DocumentAdapter() {
+                override fun textChanged(e: DocumentEvent) {
+                    if (getClientProperty(OFFERING) == true) return
+                    toolTipText = field.text.ifEmpty { null }
+                    onEdit(field.text)
+                }
+            })
+        }
+
+    /** Replaces the names a dropdown offers, keeping what's typed in it. */
+    private fun ComboBox<String>.offer(names: List<String>) {
+        val field = editor.editorComponent as? JTextField ?: return
+        val typed = field.text
+        putClientProperty(OFFERING, true)
+        try {
+            model = DefaultComboBoxModel(names.toTypedArray())
+            field.text = typed
+        } finally {
+            putClientProperty(OFFERING, null)
+        }
+    }
+
     /** A plain value, edited where it sits, with the value it contributes on the right. */
     private fun literal(
         indent: Int,
-        label: String,
+        label: String?,
         value: String,
         onEdit: (String) -> Unit,
         onTransform: ((String) -> Unit)?,
@@ -327,7 +467,7 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
         }
         return BorderLayoutPanel().apply {
             border = JBUI.Borders.empty(2, indentOf(indent) + ARROW_WIDTH, 2, 8)
-            addToLeft(JBLabel(label).apply { border = JBUI.Borders.emptyRight(6) })
+            label?.let { addToLeft(JBLabel(it).apply { border = JBUI.Borders.emptyRight(6) }) }
             addToCenter(field)
             addToRight(buttons)
         }
@@ -340,7 +480,8 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
                 cell(typeCombo(node, op))
                 op?.let { browserLink("Docs", it.docsUrl).applyToComponent { toolTipText = it.summary } }
             }
-            op?.attributes?.forEach { attr ->
+            val onRow = TENANT_STEPS[node.string("type")]?.onRow.orEmpty()
+            op?.attributes?.filterNot { it.name in onRow }?.forEach { attr ->
                 when (attr.kind) {
                     AttrKind.VALUE -> Unit
                     AttrKind.VALUE_LIST, AttrKind.STRING_LIST -> row {
@@ -598,7 +739,18 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
 
     private val hover: JBColor get() = JBColor.namedColor("Table.stripeColor", JBColor(0xF5F5F5, 0x3C3F41))
 
+    /** A step that reads from the tenant: its short title, and the attributes its row edits. */
+    private class TenantStep(val title: String, val onRow: Set<String>)
+
     private companion object {
+        val SOURCE_KEYS = listOf("sourceName", "applicationName", "applicationId")
+        const val OFFERING = "sailpoint.transform.offering"
+        val TENANT_STEPS = mapOf(
+            "accountAttribute" to TenantStep("Account", SOURCE_KEYS.toSet() + "attributeName"),
+            "identityAttribute" to TenantStep("Identity", setOf("name")),
+            "getReferenceIdentityAttribute" to TenantStep("Reference", setOf("uid", "attributeName")),
+        )
+
         const val SUMMARY_LENGTH = 40
         const val VALUE_LENGTH = 24
         val ARROW_WIDTH: Int get() = AllIcons.General.ArrowRight.iconWidth + JBUI.scale(6)
