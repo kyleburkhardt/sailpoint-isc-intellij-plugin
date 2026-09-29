@@ -79,7 +79,8 @@ Source
 - [x] **PR #2** (this plan) and **PR #3** (phase 3) merged 2026-09-18.
 
 ### In progress
-- [ ] **Transform editor** (branch `transform-editor`): a form-first editor with a live local preview, next to the JSON. See "Transform editor" below.
+- [ ] **Transform editor** ([PR #4](https://github.com/kyleburkhardt/sailpoint-isc-intellij-plugin/pull/4), branch `transform-editor`): a form-first editor with a live local preview, next to the JSON. See "Transform editor" below.
+- [ ] **v0.2.0 release:** `pluginVersion` is bumped in PR #4. Once it's merged, tag `v0.2.0` on `master` and push the tag.
 - [ ] **Repo settings suggested but not applied:**
   - Make `build` (and `analyze`) required checks in the ruleset.
   - Turn on **Automatically delete head branches** and **Always suggest updating pull request branches**.
