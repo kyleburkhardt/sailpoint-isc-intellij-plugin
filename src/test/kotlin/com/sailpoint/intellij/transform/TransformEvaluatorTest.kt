@@ -3,6 +3,7 @@ package com.sailpoint.intellij.transform
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -203,5 +204,27 @@ class TransformEvaluatorTest {
             ),
             neededInputs(transform(json)),
         )
+    }
+
+    @Test
+    fun `only a transform that works on the incoming value reads it`() {
+        fun reads(json: String) = readsImplicitInput(transform(json))
+
+        assertTrue(reads("""{"type":"lower","attributes":{}}"""))
+        // An explicit input at the start of the chain replaces it...
+        assertFalse(reads("""{"type":"upper","attributes":{"input":{"type":"trim","attributes":{"input":"  a "}}}}"""))
+        assertFalse(reads("""{"type":"lower","attributes":{"input":{"type":"identityAttribute","attributes":{"name":"department"}}}}"""))
+        // ...but only there: the last step of the chain still gets it.
+        assertTrue(reads("""{"type":"upper","attributes":{"input":{"type":"trim","attributes":{}}}}"""))
+        // Operations that don't work on an input don't read it, but what they nest might.
+        assertFalse(reads("""{"type":"static","attributes":{"value":"x"}}"""))
+        assertFalse(reads("""{"type":"concat","attributes":{"values":["a",{"type":"identityAttribute","attributes":{"name":"b"}}]}}"""))
+        assertTrue(reads("""{"type":"concat","attributes":{"values":["a",{"type":"upper","attributes":{}}]}}"""))
+        // Nested under an explicit input, a step gets that input rather than ISC's.
+        assertFalse(reads("""{"type":"conditional","attributes":{"input":"x","expression":"${'$'}v eq x","v":{"type":"lower","attributes":{}},
+            "positiveCondition":"y","negativeCondition":"n"}}"""))
+        // What the preview can't see into might use it.
+        assertTrue(reads("""{"type":"reference","attributes":{"id":"Other"}}"""))
+        assertTrue(reads("""{"type":"notAnOperation","attributes":{}}"""))
     }
 }

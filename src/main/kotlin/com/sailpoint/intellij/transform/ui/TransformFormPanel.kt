@@ -36,6 +36,7 @@ import com.sailpoint.intellij.transform.TransformCatalog
 import com.sailpoint.intellij.transform.TransformEvaluator
 import com.sailpoint.intellij.transform.evaluate
 import com.sailpoint.intellij.transform.neededInputs
+import com.sailpoint.intellij.transform.readsImplicitInput
 import java.awt.Cursor
 import java.awt.FlowLayout
 import java.awt.event.MouseAdapter
@@ -87,7 +88,7 @@ class TransformFormPanel(private val nameEditable: Boolean, private val onModelC
     }
 
     private fun refresh() {
-        inputs.update(neededInputs(model))
+        inputs.update(neededInputs(model), readsImplicitInput(model))
         val trace = evaluate(model, inputs.context())
         updaters.forEach { it(trace) }
     }

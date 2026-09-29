@@ -221,6 +221,35 @@ fun neededInputs(transform: JsonObject): List<NeededInput> {
     return found.toList()
 }
 
+/**
+ * Whether [transform] reads the value ISC passes in (its implicit input). It doesn't when every operation that reads an
+ * input is given an explicit one, or when nothing in it reads an input at all, e.g. a `static` or an `identityAttribute`.
+ */
+fun readsImplicitInput(transform: JsonObject): Boolean {
+    // Every element walked here is handed the implicit input; an explicit `input` stops it reaching anything below it.
+    fun walk(element: JsonElement?): Boolean = when {
+        element == null || !(element.isJsonObject || element.isJsonArray) -> false
+        element.isJsonArray -> element.asJsonArray.any(::walk)
+        !element.asJsonObject.has("type") -> element.asJsonObject.entrySet().any { (_, child) -> walk(child) }
+        else -> {
+            val node = element.asJsonObject
+            val attributes = node.attributes()
+            if (attributes.has("input")) walk(attributes.get("input"))
+            else readsInput(node.string("type")) || attributes.entrySet().any { (_, child) -> walk(child) }
+        }
+    }
+    return walk(transform)
+}
+
+/**
+ * Whether an operation works on its input, which the schema says by giving it an `input` attribute. A `reference` or
+ * `rule` passes it on to code the preview can't see, and an unknown type might use it, so those count as reading it.
+ */
+private fun readsInput(type: String?): Boolean {
+    val op = type?.let { TransformCatalog[it] } ?: return true
+    return op.attribute("input") != null || type == "reference" || type == "rule"
+}
+
 /** The tenant value this node reads, if it reads one. */
 private fun needOf(node: JsonObject): NeededInput? {
     val attributes = node.attributes()

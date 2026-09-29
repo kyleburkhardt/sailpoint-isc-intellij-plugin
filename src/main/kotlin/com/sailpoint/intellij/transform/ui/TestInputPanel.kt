@@ -23,6 +23,7 @@ class TestInputPanel(private val onChange: () -> Unit) {
     private val values = LinkedHashMap<NeededInput, String>()
     private var incoming = ""
     private var needs = emptyList<NeededInput>()
+    private var readsInput = true
 
     private val container = JPanel(BorderLayout())
 
@@ -32,10 +33,14 @@ class TestInputPanel(private val onChange: () -> Unit) {
         rebuild()
     }
 
-    /** Shows a field for each of [needed], keeping anything already typed. */
-    fun update(needed: List<NeededInput>) {
-        if (needed == needs) return
+    /**
+     * Shows a field for each of [needed], and the input value only when the transform [reads it][readsInput], keeping
+     * anything already typed.
+     */
+    fun update(needed: List<NeededInput>, readsInput: Boolean) {
+        if (needed == needs && readsInput == this.readsInput) return
         needs = needed
+        this.readsInput = readsInput
         values.keys.retainAll(needed.toSet())
         rebuild()
     }
@@ -62,9 +67,13 @@ class TestInputPanel(private val onChange: () -> Unit) {
     }
 
     private fun form(): DialogPanel = panel {
-        row("Input value:") {
-            cell(field(incoming) { incoming = it }).align(AlignX.FILL)
-                .comment("The attribute value ISC passes into the transform.")
+        if (readsInput) {
+            row("Input value:") {
+                cell(field(incoming) { incoming = it }).align(AlignX.FILL)
+                    .comment("The attribute value ISC passes into the transform.")
+            }
+        } else {
+            row { comment("This transform doesn't use the value ISC passes in.") }
         }
         // Only the operations that read tenant data ask for anything, and only for what they actually reference.
         needs.filter { it.kind.asksForAValue }.forEach { need ->
