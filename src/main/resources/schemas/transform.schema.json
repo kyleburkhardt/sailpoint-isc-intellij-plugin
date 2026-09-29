@@ -37,6 +37,7 @@
             "identityAttribute",
             "indexOf",
             "iso3166",
+            "join",
             "lastIndexOf",
             "leftPad",
             "lookup",
@@ -753,6 +754,50 @@
                   }
                 },
                 "additionalProperties": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "join"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "description": "A literal value or a nested transform.",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "$ref": "#/definitions/transform"
+                        }
+                      ]
+                    },
+                    "description": "Values joined in order."
+                  },
+                  "separator": {
+                    "type": "string",
+                    "description": "Placed between each value. Default: a comma."
+                  }
+                },
+                "additionalProperties": true,
+                "required": [
+                  "values"
+                ]
               }
             }
           }

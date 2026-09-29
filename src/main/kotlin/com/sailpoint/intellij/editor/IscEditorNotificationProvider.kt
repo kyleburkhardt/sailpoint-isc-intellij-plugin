@@ -8,6 +8,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.EditorNotificationPanel
 import com.intellij.ui.EditorNotificationProvider
 import com.sailpoint.intellij.api.ResourceKind
+import com.sailpoint.intellij.transform.ui.IscTest
 import java.util.function.Function
 import javax.swing.JComponent
 
@@ -32,6 +33,9 @@ class IscEditorNotificationProvider : EditorNotificationProvider, DumbAware {
                 }
                 if (tenant != null && file.kind == ResourceKind.SOURCE_SCHEDULES) {
                     createActionLabel("Edit Schedule…") { service.editSchedule(file) }
+                }
+                if (tenant != null && file.kind == ResourceKind.TRANSFORMS) {
+                    createActionLabel("Test in ISC…") { IscTest.setUpAndRun(project, file) }
                 }
                 if (tenant != null && file.kind.editable) {
                     createActionLabel(if (file.remoteId == null) "Create in ISC" else "Push to ISC", PushToIscAction.ID)

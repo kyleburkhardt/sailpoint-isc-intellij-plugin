@@ -11,13 +11,15 @@ import com.intellij.ui.dsl.builder.panel
 import com.sailpoint.intellij.editor.IscEditorService
 import com.sailpoint.intellij.settings.IscSettings
 import com.sailpoint.intellij.settings.IscTenant
+import com.sailpoint.intellij.transform.OpDef
+import com.sailpoint.intellij.transform.TransformCatalog
 import javax.swing.JComponent
 
 class NewTransformDialog(private val project: Project, preselectedTenantId: String?) : DialogWrapper(project) {
     private val tenants = service<IscSettings>().tenants
     private var tenant: IscTenant? = tenants.find { it.id == preselectedTenantId } ?: tenants.firstOrNull()
     private var name = ""
-    private var type: String? = "static"
+    private var operation: OpDef? = TransformCatalog["static"]
 
     init {
         title = "New SailPoint Transform"
@@ -32,26 +34,16 @@ class NewTransformDialog(private val project: Project, preselectedTenantId: Stri
             textField().bindText(::name).align(AlignX.FILL).focused()
                 .validationOnApply { if (it.text.isBlank()) error("Name is required") else null }
         }
-        row("Type:") {
-            comboBox(TRANSFORM_TYPES).bindItem(::type)
+        row("Operation:") {
+            comboBox(TransformCatalog.ops, textListCellRenderer { it?.label }).bindItem(::operation).align(AlignX.FILL)
+                .comment("The transform opens on a form with this operation's attributes ready to fill in.")
         }
     }
 
     fun showAndCreate() {
         if (showAndGet()) {
             val tenantId = tenant?.id ?: return
-            project.service<IscEditorService>().newTransform(tenantId, name.trim(), type ?: "static")
+            project.service<IscEditorService>().newTransform(tenantId, name.trim(), operation?.type ?: "static")
         }
-    }
-
-    companion object {
-        val TRANSFORM_TYPES = listOf(
-            "accountAttribute", "base64Decode", "base64Encode", "concat", "conditional", "dateCompare", "dateFormat",
-            "dateMath", "decomposeDiacriticalMarks", "displayName", "e164phone", "firstValid", "getEndOfString",
-            "getReferenceIdentityAttribute", "identityAttribute", "indexOf", "iso3166", "lastIndexOf", "leftPad",
-            "lookup", "lower", "normalizeNames", "randomAlphaNumeric", "randomNumeric", "reference", "replace",
-            "replaceAll", "rfc5646", "rightPad", "rule", "split", "static", "substring", "trim", "upper",
-            "usernameGenerator", "uuid",
-        )
     }
 }
