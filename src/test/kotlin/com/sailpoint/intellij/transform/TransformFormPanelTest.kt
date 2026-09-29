@@ -4,6 +4,7 @@ import com.google.gson.JsonParser
 import com.intellij.testFramework.fixtures.IdeaTestFixtureFactory
 import com.sailpoint.intellij.transform.ui.TransformFormPanel
 import org.junit.AfterClass
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
@@ -46,6 +47,32 @@ class TransformFormPanelTest {
             panel.setModel(transform)
             assertNotNull("${op.type} did not render", panel.component)
         }
+    }
+
+    @Test
+    fun `moving a step swaps what it does with its neighbour and keeps the chain`() {
+        // Runs as: trim " A ", then lower, then upper.
+        val json = """
+            {"name":"T","type":"upper","attributes":{"input":
+              {"type":"lower","attributes":{"input":
+                {"type":"trim","attributes":{"input":" A "}}}}}}
+        """.trimIndent()
+        val panel = TransformFormPanel(nameEditable = true) {}
+        panel.setModel(JsonParser.parseString(json).asJsonObject)
+
+        // Upper moves up: trim, upper, lower.
+        panel.moveStep("", up = true)
+        assertEquals(
+            """{"name":"T","type":"lower","attributes":{"input":{"type":"upper","attributes":{"input":{"type":"trim","attributes":{"input":" A "}}}}}}""",
+            panel.model.toString(),
+        )
+        // Trim moves down: its explicit input stays first in the chain.
+        panel.moveStep("input.input", up = false)
+        assertEquals(
+            """{"name":"T","type":"lower","attributes":{"input":{"type":"trim","attributes":{"input":{"type":"upper","attributes":{"input":" A "}}}}}}""",
+            panel.model.toString(),
+        )
+        assertEquals("a", evaluate(panel.model).result.textOrNull)
     }
 
     companion object {

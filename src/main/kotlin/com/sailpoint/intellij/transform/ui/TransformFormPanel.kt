@@ -170,14 +170,30 @@ class TransformFormPanel(
 
     /** One step of the chain: its number, what it does, and what it produced. */
     private fun step(node: JsonObject, path: String, number: Int) {
-        operation(node, path, indent = 0, lead = "$number", chained = true)
+        val earlier = node.attributes().get("input").isTransform()
+        val later = path.isNotEmpty()
+        val moves = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+            isOpaque = false
+            border = JBUI.Borders.emptyLeft(4)
+            add(iconButton("Move up", AllIcons.Actions.MoveUp) { moveStep(path, up = true) }.apply { isEnabled = earlier })
+            add(iconButton("Move down", AllIcons.Actions.MoveDown) { moveStep(path, up = false) }.apply { isEnabled = later })
+        }
+        operation(node, path, indent = 0, lead = "$number", chained = true, moves = moves.takeIf { earlier || later })
     }
 
     /**
      * A row for one transform, wherever it sits. [chained] marks a step of the top-level chain, whose `input` is the
      * step before it rather than something to show here.
      */
-    private fun operation(node: JsonObject, path: String, indent: Int, lead: String, chained: Boolean, remove: (() -> Unit)? = null) {
+    private fun operation(
+        node: JsonObject,
+        path: String,
+        indent: Int,
+        lead: String,
+        chained: Boolean,
+        moves: JComponent? = null,
+        remove: (() -> Unit)? = null,
+    ) {
         val op = TransformCatalog[node.string("type")]
         val attributes = node.attributes()
         val open = opened == path
@@ -186,7 +202,7 @@ class TransformFormPanel(
         val tenantStep = TENANT_STEPS[node.string("type")]
         rows.add(
             if (tenantStep != null) {
-                tenantRow(node, attributes, tenantStep, indent, lead, path, open, onClick)
+                tenantRow(node, attributes, tenantStep, indent, lead, path, open, moves, onClick)
             } else {
                 row(
                     indent = indent,
@@ -195,6 +211,7 @@ class TransformFormPanel(
                     detail = summary(op, attributes),
                     path = path,
                     open = open,
+                    moves = moves,
                     onClick = onClick,
                 )
             },
@@ -287,7 +304,16 @@ class TransformFormPanel(
     // ------------------------------------------------------------- widgets
 
     /** A clickable row: what it is on the left, what it produced on the right. */
-    private fun row(indent: Int, lead: String, title: String, detail: String, path: String, open: Boolean, onClick: () -> Unit): JComponent {
+    private fun row(
+        indent: Int,
+        lead: String,
+        title: String,
+        detail: String,
+        path: String,
+        open: Boolean,
+        moves: JComponent?,
+        onClick: () -> Unit,
+    ): JComponent {
         val value = JBLabel().apply { border = JBUI.Borders.emptyLeft(8) }
         updaters += { trace -> show(value, trace.at(path)?.result) }
 
@@ -306,7 +332,7 @@ class TransformFormPanel(
             border = JBUI.Borders.empty(2, indentOf(indent), 2, 8)
             addToLeft(left)
             addToCenter(summary)
-            addToRight(value)
+            addToRight(BorderLayoutPanel().apply { isOpaque = false; addToCenter(value); moves?.let(::addToRight) })
             isOpaque = true
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             addMouseListener(
@@ -340,6 +366,7 @@ class TransformFormPanel(
         lead: String,
         path: String,
         open: Boolean,
+        moves: JComponent?,
         onClick: () -> Unit,
     ): JComponent {
         val left = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0)).apply {
@@ -348,9 +375,8 @@ class TransformFormPanel(
             if (lead.isNotEmpty()) add(JBLabel(lead).apply { foreground = UIUtil.getContextHelpForeground() })
             add(JBLabel(step.title).apply { toolTipText = TransformCatalog[node.string("type")]?.label })
         }
-        val names = JPanel(GridLayout(1, 0, JBUI.scale(4), 0)).apply {
+        val names = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
             isOpaque = false
-            border = JBUI.Borders.emptyLeft(4)
         }
         when (node.string("type")) {
             "accountAttribute" -> {
@@ -430,6 +456,7 @@ class TransformFormPanel(
                     addToCenter(BorderLayoutPanel().apply { isOpaque = false; border = JBUI.Borders.emptyLeft(6); addToCenter(test) })
                 },
             )
+            moves?.let(::addToRight)
             isOpaque = true
             background = UIUtil.getPanelBackground()
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
@@ -447,9 +474,7 @@ class TransformFormPanel(
             field?.text = initial
             (field as? JBTextField)?.emptyText?.text = placeholder
             toolTipText = initial.ifEmpty { null }
-            val narrow = Dimension(JBUI.scale(NAME_WIDTH), preferredSize.height)
-            preferredSize = narrow
-            minimumSize = narrow
+            fitNames(listOf(initial))
             addPopupMenuListener(object : PopupMenuListener {
                 // The dropdown itself is narrow; its list is as wide as the names in it.
                 override fun popupMenuWillBecomeVisible(e: PopupMenuEvent) {
@@ -488,6 +513,25 @@ class TransformFormPanel(
         } finally {
             putClientProperty(OFFERING, null)
         }
+        fitNames(names + typed)
+    }
+
+    /**
+     * Makes a dropdown wide enough for most of [names] — the longest few are left to the tooltip and the wider list,
+     * so one very long name doesn't widen every row.
+     */
+    private fun ComboBox<String>.fitNames(names: List<String>) {
+        val field = editor.editorComponent as? JTextField ?: return
+        val metrics = field.getFontMetrics(field.font)
+        val widths = names.filter { it.isNotEmpty() }.map { metrics.stringWidth(it) }.sorted()
+        val text = if (widths.isEmpty()) 0 else widths[((widths.size - 1) * FIT_SHARE).toInt()]
+        // The arrow button and the field's own insets come on top of the text.
+        val chrome = JBUI.scale(ARROW_AND_INSETS)
+        val width = (text + chrome).coerceIn(JBUI.scale(MIN_NAME_WIDTH), JBUI.scale(MAX_NAME_WIDTH))
+        val size = Dimension(width, preferredSize.height)
+        preferredSize = size
+        minimumSize = size
+        parent?.revalidate()
     }
 
     /** A plain value, edited where it sits, with the value it contributes on the right. */
@@ -654,6 +698,27 @@ class TransformFormPanel(
         changed(structural = true)
     }
 
+    /**
+     * Swaps a step with the one before it ([up]) or after it. Each keeps its place in the chain — its `input` link —
+     * and takes the other's operation and settings, so an explicit input at the start stays at the start.
+     */
+    internal fun moveStep(path: String, up: Boolean) {
+        val otherPath = if (up) TransformEvaluator.join(path, "input") else path.substringBeforeLast('.', "")
+        val step = nodeAt(path) ?: return
+        val other = nodeAt(otherPath)?.takeIf { it !== step } ?: return
+        val stepAttributes = step.attributes()
+        val otherAttributes = other.attributes()
+        val stepInput = stepAttributes.remove("input")
+        val otherInput = otherAttributes.remove("input")
+        val type = step.get("type")
+        step.add("type", other.get("type"))
+        other.add("type", type)
+        step.add("attributes", otherAttributes.apply { stepInput?.let { add("input", it) } })
+        other.add("attributes", stepAttributes.apply { otherInput?.let { add("input", it) } })
+        if (opened == path) opened = otherPath
+        changed(structural = true)
+    }
+
     /** Takes a step out of the chain, joining what fed it to what followed it. */
     private fun removeStep(path: String) {
         val step = nodeAt(path) ?: return
@@ -785,7 +850,12 @@ class TransformFormPanel(
     private companion object {
         val SOURCE_KEYS = listOf("sourceName", "applicationName", "applicationId")
         const val OFFERING = "sailpoint.transform.offering"
-        const val NAME_WIDTH = 96
+        const val MIN_NAME_WIDTH = 90
+        const val MAX_NAME_WIDTH = 220
+        const val ARROW_AND_INSETS = 36
+
+        /** The share of names a dropdown is sized to show in full. */
+        const val FIT_SHARE = 0.8
         val TENANT_STEPS = mapOf(
             "accountAttribute" to TenantStep("Account", SOURCE_KEYS.toSet() + "attributeName"),
             "identityAttribute" to TenantStep("Identity", setOf("name")),
