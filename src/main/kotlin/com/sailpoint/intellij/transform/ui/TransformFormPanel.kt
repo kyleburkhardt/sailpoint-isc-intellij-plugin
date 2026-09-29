@@ -13,6 +13,7 @@ import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.TitledSeparator
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.InplaceButton
+import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
@@ -87,6 +88,12 @@ class TransformFormPanel(
     }
     private val updaters = mutableListOf<(Trace) -> Unit>()
 
+    /** Running the transform in ISC, when the form belongs to a tenant; without it there's no ISC line. */
+    var iscTest: IscTestActions? = null
+
+    private var iscOutcome: IscTestOutcome? = null
+    private val iscRow = JPanel(VerticalLayout(0)).apply { isOpaque = false }
+
     /** The one step whose settings are open, by its path; only one is open at a time. */
     private var opened: String? = null
 
@@ -111,6 +118,10 @@ class TransformFormPanel(
         rows.add(addStep())
         rows.add(divider("Result"))
         rows.add(resultRow())
+        if (iscTest != null) {
+            rows.add(iscRow)
+            updaters += { trace -> fillIscRow(trace) }
+        }
 
         rows.revalidate()
         rows.repaint()
@@ -317,6 +328,63 @@ class TransformFormPanel(
         }
     }.apply { border = JBUI.Borders.empty(4, indentOf(0) + JBUI.scale(20), 4, 8) }
 
+    /** Shows how the last test in ISC went, under the preview's own result. */
+    fun showIscOutcome(outcome: IscTestOutcome?) {
+        iscOutcome = outcome
+        refresh()
+    }
+
+    /**
+     * ISC's answer for the transform, next to the preview's: the identity it ran on, its value and any errors, whether
+     * it agrees with the preview, and whether the transform has changed since.
+     */
+    private fun fillIscRow(trace: Trace) {
+        val actions = iscTest ?: return
+        iscRow.removeAll()
+        val outcome = iscOutcome
+        val lines = mutableListOf<Pair<String, java.awt.Color>>()
+        when (outcome) {
+            null -> Unit
+            is IscTestOutcome.Running -> lines += "ISC · ${outcome.setup.identityName}: running…" to UIUtil.getContextHelpForeground()
+            is IscTestOutcome.Failed -> lines += "ISC · ${outcome.setup.identityName}: ${outcome.message}" to JBColor.RED
+            is IscTestOutcome.Done -> {
+                lines += "ISC · ${outcome.setup.identityName}: ${outcome.value?.let { "\"$it\"" } ?: "nothing"}" to UIUtil.getLabelForeground()
+                outcome.errors.forEach { lines += it to JBColor.RED }
+                outcome.previousValue?.let { lines += "Now in ${outcome.setup.attribute}: \"$it\"" to UIUtil.getContextHelpForeground() }
+                val local = trace.result
+                if (local is EvalResult.Value && local.text != outcome.value) {
+                    lines += "The preview above differs from ISC." to UIUtil.getContextHelpForeground()
+                }
+            }
+        }
+        val sent = (outcome as? IscTestOutcome.Done)?.sent ?: (outcome as? IscTestOutcome.Failed)?.sent
+        if (sent != null && sent != actions.current()) {
+            lines += "Run before your latest edits." to UIUtil.getContextHelpForeground()
+        }
+        lines.forEach { (text, color) ->
+            iscRow.add(
+                JBTextArea(text).apply {
+                    isEditable = false
+                    isOpaque = false
+                    lineWrap = true
+                    border = JBUI.Borders.empty()
+                    font = UIUtil.getLabelFont()
+                    foreground = color
+                },
+            )
+        }
+        iscRow.add(
+            JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(12), 0)).apply {
+                isOpaque = false
+                if (outcome != null && outcome !is IscTestOutcome.Running) add(ActionLink("Run again") { actions.run() })
+                add(ActionLink(if (outcome == null) "Test in ISC…" else "Change…") { actions.setUp() })
+            },
+        )
+        iscRow.border = JBUI.Borders.empty(0, indentOf(0) + ARROW_WIDTH, 12, 8)
+        iscRow.revalidate()
+        iscRow.repaint()
+    }
+
     /** The final result in full: wrapped rather than cut short, and selectable so it can be copied. */
     private fun resultRow(): JComponent {
         val value = JBTextArea().apply {
@@ -341,7 +409,7 @@ class TransformFormPanel(
             }
         }
         return BorderLayoutPanel().apply {
-            border = JBUI.Borders.empty(0, indentOf(0) + ARROW_WIDTH, 12, 8)
+            border = JBUI.Borders.empty(0, indentOf(0) + ARROW_WIDTH, if (iscTest != null) 6 else 12, 8)
             addToCenter(value)
         }
     }
@@ -934,3 +1002,9 @@ class TransformFormPanel(
         val ARROW_WIDTH: Int get() = AllIcons.General.ArrowRight.iconWidth + JBUI.scale(6)
     }
 }
+
+/**
+ * What the form's ISC line can do: run the test again as it was set up, or set it up afresh. [current] is the
+ * transform as a test would send it now, to tell when the last result is out of date.
+ */
+class IscTestActions(val run: () -> Unit, val setUp: () -> Unit, val current: () -> String?)

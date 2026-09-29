@@ -271,4 +271,28 @@ class TransformEvaluatorTest {
         assertTrue(reads("""{"type":"reference","attributes":{"id":"Other"}}"""))
         assertTrue(reads("""{"type":"notAnOperation","attributes":{}}"""))
     }
+
+    @Test
+    fun `the implicit input is made explicit exactly where it would have arrived`() {
+        val input = transform("""{"type":"accountAttribute","attributes":{"sourceName":"HR","attributeName":"dept"}}""")
+        fun given(json: String) = withImplicitInput(transform(json), input).toString()
+        val dept = input.toString()
+
+        // The first step of a chain gets it; the steps after it already have theirs.
+        assertEquals(
+            """{"type":"upper","attributes":{"input":{"type":"trim","attributes":{"input":$dept}}}}""",
+            given("""{"type":"upper","attributes":{"input":{"type":"trim","attributes":{}}}}"""),
+        )
+        // A step with no attributes gets some.
+        assertEquals("""{"type":"lower","attributes":{"input":$dept}}""", given("""{"type":"lower"}"""))
+        // Inside something that doesn't read an input, the steps that do each get it.
+        assertEquals(
+            """{"type":"concat","attributes":{"values":[{"type":"upper","attributes":{"input":$dept}},"-"]}}""",
+            given("""{"type":"concat","attributes":{"values":[{"type":"upper","attributes":{}},"-"]}}"""),
+        )
+        // Nothing reads it, so nothing changes, and the original is left alone.
+        val static = transform("""{"type":"static","attributes":{"value":"x"}}""")
+        assertEquals(static.toString(), withImplicitInput(static, input).toString())
+        assertFalse(readsImplicitInput(withImplicitInput(transform("""{"type":"lower"}"""), input)))
+    }
 }

@@ -246,6 +246,34 @@ fun readsImplicitInput(transform: JsonObject): Boolean {
 }
 
 /**
+ * A copy of [transform] with [input] given explicitly everywhere it would otherwise receive the value ISC passes in —
+ * the same places [readsImplicitInput] finds — so it can run where nothing passes a value in, like an identity preview.
+ */
+fun withImplicitInput(transform: JsonObject, input: JsonElement): JsonObject {
+    val copy = transform.deepCopy()
+    fun give(element: JsonElement?) {
+        when {
+            element == null || !(element.isJsonObject || element.isJsonArray) -> Unit
+            element.isJsonArray -> element.asJsonArray.forEach(::give)
+            !element.asJsonObject.has("type") -> element.asJsonObject.entrySet().forEach { (_, child) -> give(child) }
+            else -> {
+                val node = element.asJsonObject
+                val attributes = node.get("attributes")?.takeIf { it.isJsonObject }?.asJsonObject
+                    ?: JsonObject().also { node.add("attributes", it) }
+                when {
+                    attributes.has("input") -> give(attributes.get("input"))
+                    // Everything nested under it now receives this input through it, as it would have the implicit one.
+                    readsInput(node.string("type")) -> attributes.add("input", input.deepCopy())
+                    else -> attributes.entrySet().forEach { (_, child) -> give(child) }
+                }
+            }
+        }
+    }
+    give(copy)
+    return copy
+}
+
+/**
  * Whether an operation works on its input, which the schema says by giving it an `input` attribute. A `reference` or
  * `rule` passes it on to code the preview can't see, and an unknown type might use it, so those count as reading it.
  */

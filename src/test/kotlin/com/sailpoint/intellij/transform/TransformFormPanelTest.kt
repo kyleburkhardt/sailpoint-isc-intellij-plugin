@@ -2,6 +2,9 @@ package com.sailpoint.intellij.transform
 
 import com.google.gson.JsonParser
 import com.intellij.testFramework.fixtures.IdeaTestFixtureFactory
+import com.sailpoint.intellij.transform.ui.IscTestActions
+import com.sailpoint.intellij.transform.ui.IscTestOutcome
+import com.sailpoint.intellij.transform.ui.IscTestSetup
 import com.sailpoint.intellij.transform.ui.TransformFormPanel
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
@@ -73,6 +76,25 @@ class TransformFormPanelTest {
             panel.model.toString(),
         )
         assertEquals("a", evaluate(panel.model).result.textOrNull)
+    }
+
+    @Test
+    fun `an ISC result shows under the preview`() {
+        val json = """{"name":"T","type":"lower","attributes":{"input":"ABC"}}"""
+        val panel = TransformFormPanel(nameEditable = true) {}
+        panel.iscTest = IscTestActions(run = {}, setUp = {}, current = { JsonParser.parseString(json).toString() })
+        panel.setModel(JsonParser.parseString(json).asJsonObject)
+        val setup = IscTestSetup("id", "Jane Doe", "displayName")
+        panel.showIscOutcome(IscTestOutcome.Done(setup, "abd", "Jane", listOf("A warning"), JsonParser.parseString(json).toString()))
+        fun texts(c: java.awt.Component): List<String> = when (c) {
+            is javax.swing.text.JTextComponent -> listOf(c.text)
+            is java.awt.Container -> c.components.flatMap(::texts)
+            else -> emptyList()
+        }
+        val shown = texts(panel.component)
+        assertTrue(shown.toString(), "ISC · Jane Doe: \"abd\"" in shown)
+        assertTrue(shown.toString(), "The preview above differs from ISC." in shown)
+        assertTrue(shown.toString(), "A warning" in shown)
     }
 
     companion object {

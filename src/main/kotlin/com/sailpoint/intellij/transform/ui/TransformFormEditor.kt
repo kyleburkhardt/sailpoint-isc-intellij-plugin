@@ -8,6 +8,7 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.components.JBLabel
@@ -36,6 +37,15 @@ class TransformFormEditor(private val project: Project, private val file: IscVir
     private var writing = false
 
     init {
+        form.iscTest = IscTestActions(
+            run = { IscTest.run(project, file) },
+            setUp = { IscTest.setUpAndRun(project, file) },
+            current = { IscTest.current(file)?.toString() },
+        )
+        val state = IscTest.state(file)
+        form.showIscOutcome(state.outcome)
+        val stopListening = state.listen { form.showIscOutcome(it) }
+        Disposer.register(this) { stopListening() }
         load()
         document?.addDocumentListener(
             object : DocumentListener {

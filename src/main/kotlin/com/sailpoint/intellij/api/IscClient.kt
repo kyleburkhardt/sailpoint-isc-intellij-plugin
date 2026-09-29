@@ -135,6 +135,50 @@ class IscClient {
             .sortedBy { it.string("name")?.lowercase() }
     }
 
+    /** Identities whose name, display name or email starts with [text] (any when it's blank), at most [limit]. */
+    fun searchIdentities(tenantId: String, text: String, limit: Int): List<JsonObject> {
+        val typed = text.trim().replace(SEARCH_RESERVED) { "\\" + it.value }
+        return post(
+            tenantId,
+            "/search/v1?limit=$limit",
+            JsonObject().apply {
+                add("indices", JsonArray().apply { add("identities") })
+                add("query", JsonObject().apply { addProperty("query", if (typed.isEmpty()) "*" else "$typed*") })
+                add("sort", JsonArray().apply { add("name") })
+            },
+        ).asJsonArray.map { it.asJsonObject }
+    }
+
+    /**
+     * What [transform] would make identity attribute [attribute] of identity [identityId], worked out by ISC and not
+     * saved. Returns the preview response: `previewAttributes` holds `value`, `previousValue` and `errorMessages`.
+     */
+    fun identityPreview(tenantId: String, identityId: String, attribute: String, transform: JsonObject): JsonObject =
+        post(
+            tenantId,
+            "/identity-profiles/v1/identity-preview",
+            JsonObject().apply {
+                addProperty("identityId", identityId)
+                add(
+                    "identityAttributeConfig",
+                    JsonObject().apply {
+                        addProperty("enabled", true)
+                        add(
+                            "attributeTransforms",
+                            JsonArray().apply {
+                                add(
+                                    JsonObject().apply {
+                                        addProperty("identityAttributeName", attribute)
+                                        add("transformDefinition", transform)
+                                    },
+                                )
+                            },
+                        )
+                    },
+                )
+            },
+        ).asJsonObject
+
     /** A connector's source configuration, which ISC returns as XML. */
     fun connectorSourceConfig(tenantId: String, scriptName: String): String =
         sendText(tenantId, "GET", "/connectors/v1/${encode(scriptName)}/source-config", null, accept = "application/xml")
@@ -288,5 +332,8 @@ class IscClient {
 
 
         private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8)
+
+        /** Characters the search query syntax treats specially, escaped so a typed name is searched as it is. */
+        private val SEARCH_RESERVED = Regex("""[+\-=&|><!(){}\[\]^"~*?:\\/\s]""")
     }
 }
