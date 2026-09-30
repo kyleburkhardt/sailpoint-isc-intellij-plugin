@@ -10,6 +10,7 @@ import com.sailpoint.intellij.api.string
 import com.google.gson.JsonObject
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * The names a transform refers to, for its dropdowns: sources, a source's account attributes, identity attributes.
@@ -23,6 +24,12 @@ interface TenantNames {
 
     /** The saved transform named [name], for the preview to run where a `reference` points; null when there isn't one. */
     fun transform(name: String, onLoaded: (JsonObject?) -> Unit) = onLoaded(null)
+
+    /** Drops what was loaded for transform [name], so the next [transform] reads it from the tenant again. */
+    fun reloadTransform(name: String) = Unit
+
+    /** Calls [listener] with a transform's name whenever what [transform] gives for it changes. Returns how to stop. */
+    fun onTransformChanged(listener: (String) -> Unit): () -> Unit = {}
 }
 
 /** [TenantNames] read from a tenant, kept for the session so every transform opened on it shares one load. */
@@ -46,6 +53,7 @@ class IscTenantNames private constructor(private val tenantId: String) : TenantN
     private val accounts = ConcurrentHashMap<String, CompletableFuture<List<String>>>()
 
     private val transforms = ConcurrentHashMap<String, CompletableFuture<JsonObject?>>()
+    private val transformListeners = CopyOnWriteArrayList<(String) -> Unit>()
 
     override fun sources(onLoaded: (List<String>) -> Unit) = sourceIds.answer(onLoaded) { it.keys.sortedBy(String::lowercase) }
 
@@ -78,6 +86,27 @@ class IscTenantNames private constructor(private val tenantId: String) : TenantN
             if (error != null) LOG.info("Couldn't load the transform '$name'", error)
             ApplicationManager.getApplication().invokeLater({ onLoaded(value) }, ModalityState.any())
         }
+    }
+
+    override fun reloadTransform(name: String) {
+        transforms.remove(name)
+        changed(name)
+    }
+
+    /** Takes [transform] as it was just saved to the tenant, so previews that reference it use it straight away. */
+    fun transformSaved(transform: JsonObject) {
+        val name = transform.string("name") ?: return
+        transforms[name] = CompletableFuture.completedFuture(transform)
+        changed(name)
+    }
+
+    override fun onTransformChanged(listener: (String) -> Unit): () -> Unit {
+        transformListeners += listener
+        return { transformListeners -= listener }
+    }
+
+    private fun changed(name: String) {
+        ApplicationManager.getApplication().invokeLater({ transformListeners.forEach { it(name) } }, ModalityState.any())
     }
 
     private fun com.google.gson.JsonArray?.orEmptyNames(): List<String> =

@@ -228,7 +228,7 @@ class TransformEvaluatorTest {
 
     @Test
     fun `an operation that isn't previewed yet says so`() {
-        assertTrue(failure("""{"type":"base64Encode"}""").contains("isn't previewed yet"))
+        assertTrue(failure("""{"type":"e164phone"}""").contains("isn't previewed yet"))
         assertTrue(failure("""{"type":"nonsense"}""").contains("isn't a transform operation"))
     }
 
@@ -465,5 +465,32 @@ class TransformEvaluatorTest {
             {"type":"identityAttribute","attributes":{"name":"uid"}},{"type":"reference","attributes":{"id":"A"}}]}}""")
         val needs = neededInputs(a) { name -> if (name == "A") a else b }
         assertEquals(listOf(NeededInput(NeedKind.IDENTITY_ATTRIBUTE, "uid")), needs)
+    }
+    @Test
+    fun `base64 encodes and decodes, as SailPoint's example does`() {
+        assertValue("MTIzNA==", """{"type":"base64Encode"}""", "1234")
+        assertValue("1234", """{"type":"base64Decode"}""", "MTIzNA==")
+        assertValue("Piñon", """{"type":"base64Decode"}""", "UGnDsW9u")
+        assertTrue(failure("""{"type":"base64Decode"}""", "not base64!").contains("isn't base64"))
+        assertValue(null, """{"type":"base64Encode"}""")
+    }
+
+    @Test
+    fun `decomposeDiacriticalMarks strips accents, as SailPoint's examples do`() {
+        assertValue("Aric", """{"type":"decomposeDiacriticalMarks"}""", "Āric")
+        assertValue("Dubcek", """{"type":"decomposeDiacriticalMarks"}""", "Dubçek")
+    }
+
+    @Test
+    fun `normalizeNames cases names, as SailPoint's examples do`() {
+        val json = """{"type":"normalizeNames"}"""
+        assertValue("John von Smith", json, "jOHN VON SmITh")
+        assertValue("Dr. John D. O'Brien", json, "Dr. JOHN D. O'BRIEN")
+        assertValue("Mary Smith-Jones", json, "MARY SMITH-JONES")
+        assertValue("Ronald McDonald", json, "RONALD MCDONALD")
+        assertValue("Angus MacDonald", json, "angus macdonald")
+        assertValue("Jack Mack", json, "JACK MACK")
+        assertValue("John Smith III", json, "john smith iii")
+        assertValue("Maria de la Cruz", json, "MARIA DE LA CRUZ")
     }
 }

@@ -4,6 +4,8 @@ import com.sailpoint.intellij.transform.EvalResult
 import com.sailpoint.intellij.transform.Op
 import com.sailpoint.intellij.transform.OpCall
 import com.sailpoint.intellij.transform.firstIssue
+import java.text.Normalizer
+import java.util.Base64
 import java.util.regex.PatternSyntaxException
 
 /** Operations that reshape a string. */
@@ -24,6 +26,11 @@ internal object StringOps {
         "rightPad" to Op { call -> pad(call, left = false) },
         "replaceAll" to Op(::replaceAll),
         "getEndOfString" to Op(::getEndOfString),
+        "base64Encode" to Op { call -> call.map { Base64.getEncoder().encodeToString(it.toByteArray(Charsets.UTF_8)) } },
+        "base64Decode" to Op(::base64Decode),
+        // As SailPoint documents it: NFKD, then every combining mark removed.
+        "decomposeDiacriticalMarks" to Op { call -> call.map { Normalizer.normalize(it, Normalizer.Form.NFKD).replace(COMBINING_MARKS, "") } },
+        "normalizeNames" to Op { call -> call.map(::normalizeName) },
     )
 
     /** Applies [transform] to the incoming value; nothing in means nothing out. */
@@ -121,6 +128,36 @@ internal object StringOps {
         return EvalResult.Value(if (count > input.length) null else input.takeLast(count))
     }
 
+    private fun base64Decode(call: OpCall): EvalResult {
+        val input = call.input ?: return EvalResult.Value(null)
+        return try {
+            EvalResult.Value(String(Base64.getDecoder().decode(input.trim()), Charsets.UTF_8))
+        } catch (e: IllegalArgumentException) {
+            EvalResult.Failure("\"$input\" isn't base64: ${e.message}.", brief = "isn't base64")
+        }
+    }
+
+    /**
+     * A name cased the way SailPoint's name normalizer documents: each part split off by a space, hyphen or apostrophe
+     * gets a capital first letter; Mc and Mac prefixes capitalize the letter after them; the particles von, del, of,
+     * de, la and y are lower case; and a Roman numeral at the end is upper case.
+     */
+    internal fun normalizeName(name: String): String {
+        val parts = name.split(NAME_BREAKS)
+        val lastWord = parts.indexOfLast { it.isNotBlank() && it !in BREAKS }
+        return parts.mapIndexed { index, part ->
+            val lower = part.lowercase()
+            when {
+                part.isEmpty() || part in BREAKS -> part
+                lower in PARTICLES -> lower
+                index == lastWord && index > 0 && ROMAN.matches(lower) -> part.uppercase()
+                lower.startsWith("mc") && lower.length > 2 -> "Mc" + lower.substring(2).replaceFirstChar(Char::uppercase)
+                lower.startsWith("mac") && lower.length >= MAC_MIN_LENGTH -> "Mac" + lower.substring(3).replaceFirstChar(Char::uppercase)
+                else -> lower.replaceFirstChar(Char::uppercase)
+            }
+        }.joinToString("")
+    }
+
     private fun split(call: OpCall): EvalResult {
         val delimiter = call.text("delimiter") ?: return call.missing("delimiter")
         val index = call.int("index") ?: return call.missing("index")
@@ -138,4 +175,15 @@ internal object StringOps {
             else -> EvalResult.Value(null)
         }
     }
+
+    private val COMBINING_MARKS = Regex("""\p{InCombiningDiacriticalMarks}""")
+
+    /** Splits a name into its parts, keeping each space, hyphen and apostrophe as a part of its own. */
+    private val NAME_BREAKS = Regex("""(?<=[ '\-])|(?=[ '\-])""")
+    private val BREAKS = setOf(" ", "-", "'")
+    private val PARTICLES = setOf("von", "del", "of", "de", "la", "y")
+    private val ROMAN = Regex("""(?:i{1,3}|iv|vi{0,3}|ix|x)""")
+
+    /** Shorter "mac" words (Mack, Macy) are ordinary names rather than a prefix. */
+    private const val MAC_MIN_LENGTH = 6
 }

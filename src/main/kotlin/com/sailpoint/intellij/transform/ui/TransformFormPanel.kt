@@ -92,6 +92,18 @@ class TransformFormPanel(
     private val referenced = HashMap<String, JsonObject?>()
     private val requested = HashSet<String>()
 
+    /** A referenced transform that changed in the tenant is loaded again, and the preview reruns with it. */
+    private val stopWatching = tenant?.onTransformChanged { name ->
+        val known = name in referenced
+        referenced.remove(name)
+        if (requested.remove(name) || known) refresh()
+    }
+
+    /** Stops following changes to referenced transforms; the form is done with. */
+    fun dispose() {
+        stopWatching?.invoke()
+    }
+
     /** Running the transform in ISC, when the form belongs to a tenant; without it there's no ISC line. */
     var iscTest: IscTestActions? = null
 
@@ -772,6 +784,13 @@ class TransformFormPanel(
                         }
                     }
                     else -> setting(attributes, attr)
+                }
+            }
+            val referenced = attributes.string("id")?.takeIf { node.string("type") == "reference" && tenant != null }
+            if (referenced != null) {
+                row {
+                    link("Reload from ISC") { _ -> tenant?.reloadTransform(referenced) }
+                        .applyToComponent { toolTipText = "Read '$referenced' from the tenant again, e.g. after it was edited there." }
                 }
             }
             val canRemove = remove != null || (chained && (path.isNotEmpty() || attributes.get("input").isTransform()))

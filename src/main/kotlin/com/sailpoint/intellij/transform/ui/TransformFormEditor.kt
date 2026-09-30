@@ -109,7 +109,7 @@ class TransformFormEditor(private val project: Project, private val file: IscVir
 
     override fun removePropertyChangeListener(listener: PropertyChangeListener) = Unit
 
-    override fun dispose() = Unit
+    override fun dispose() = form.dispose()
 
     private companion object {
         const val RELOAD_DELAY_MS = 250

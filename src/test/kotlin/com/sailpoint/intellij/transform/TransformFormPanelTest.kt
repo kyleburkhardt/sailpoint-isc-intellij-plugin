@@ -139,6 +139,30 @@ class TransformFormPanelTest {
         assertTrue(texts(panel.component).toString(), "\"SALES\"" in texts(panel.component))
     }
 
+    @Test
+    fun `a referenced transform that changes in the tenant is previewed again`() {
+        var shared = JsonParser.parseString("""{"name":"Case","type":"upper"}""").asJsonObject
+        val listeners = mutableListOf<(String) -> Unit>()
+        val tenant = object : com.sailpoint.intellij.transform.ui.TenantNames {
+            override fun sources(onLoaded: (List<String>) -> Unit) = Unit
+            override fun accountAttributes(source: String, onLoaded: (List<String>) -> Unit) = Unit
+            override fun identityAttributes(onLoaded: (List<String>) -> Unit) = Unit
+            override fun transform(name: String, onLoaded: (com.google.gson.JsonObject?) -> Unit) = onLoaded(shared)
+            override fun onTransformChanged(listener: (String) -> Unit): () -> Unit {
+                listeners += listener
+                return { listeners -= listener }
+            }
+        }
+        val panel = TransformFormPanel(nameEditable = true, tenant = tenant) {}
+        panel.setModel(JsonParser.parseString("""{"name":"T","type":"reference","attributes":{"id":"Case","input":"Abc"}}""").asJsonObject)
+        assertTrue(texts(panel.component).toString(), "\"ABC\"" in texts(panel.component))
+        shared = JsonParser.parseString("""{"name":"Case","type":"lower"}""").asJsonObject
+        listeners.toList().forEach { it("Case") }
+        assertTrue(texts(panel.component).toString(), "\"abc\"" in texts(panel.component))
+        panel.dispose()
+        assertTrue(listeners.isEmpty())
+    }
+
     private fun fields(c: java.awt.Component): List<com.intellij.ui.components.JBTextField> = when (c) {
         is com.intellij.ui.components.JBTextField -> listOf(c)
         is java.awt.Container -> c.components.flatMap(::fields)
