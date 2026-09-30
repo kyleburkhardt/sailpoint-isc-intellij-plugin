@@ -163,6 +163,37 @@ class TransformFormPanelTest {
         assertTrue(listeners.isEmpty())
     }
 
+    @Test
+    fun `entries inside a step move up and down`() {
+        val json = """{"name":"T","type":"firstValid","attributes":{"values":["a",{"type":"upper","attributes":{"input":"b"}},"c"]}}"""
+        val panel = TransformFormPanel(nameEditable = true) {}
+        panel.setModel(JsonParser.parseString(json).asJsonObject)
+        val values = panel.model.getAsJsonObject("attributes").getAsJsonArray("values")
+        panel.moveItem(values, 1, up = true, path = "", name = "values")
+        assertEquals("""[{"type":"upper","attributes":{"input":"b"}},"a","c"]""", values.toString())
+        panel.moveItem(values, 1, up = false, path = "", name = "values")
+        assertEquals("""[{"type":"upper","attributes":{"input":"b"}},"c","a"]""", values.toString())
+        panel.moveItem(values, 2, up = false, path = "", name = "values")
+        assertEquals("""[{"type":"upper","attributes":{"input":"b"}},"c","a"]""", values.toString())
+    }
+
+    @Test
+    fun `test values can be taken and put back`() {
+        val json = """{"name":"T","type":"lower","attributes":{"input":{"type":"identityAttribute","attributes":{"name":"email"}}}}"""
+        var remembered: com.sailpoint.intellij.transform.ui.TestValues? = null
+        val first = TransformFormPanel(nameEditable = true) {}
+        first.onTestValuesChanged = { remembered = it }
+        first.setModel(JsonParser.parseString(json).asJsonObject)
+        val email = NeededInput(NeedKind.IDENTITY_ATTRIBUTE, "email")
+        fields(first.component).single { it.emptyText.text == "test value" }.text = "Jane@Example.com"
+        assertEquals("Jane@Example.com", remembered?.values?.get(email))
+
+        val second = TransformFormPanel(nameEditable = true) {}
+        second.setModel(JsonParser.parseString(json).asJsonObject)
+        second.restoreTestValues(remembered!!)
+        assertTrue(texts(second.component).toString(), "\"jane@example.com\"" in texts(second.component))
+    }
+
     private fun fields(c: java.awt.Component): List<com.intellij.ui.components.JBTextField> = when (c) {
         is com.intellij.ui.components.JBTextField -> listOf(c)
         is java.awt.Container -> c.components.flatMap(::fields)

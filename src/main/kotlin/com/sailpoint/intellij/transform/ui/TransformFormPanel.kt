@@ -79,7 +79,16 @@ class TransformFormPanel(
     var model: JsonObject = JsonObject()
         private set
 
-    private val inputs = TestInputPanel { refresh() }
+    private val inputs: TestInputPanel = TestInputPanel {
+        refresh()
+        onTestValuesChanged?.invoke(inputs.snapshot())
+    }
+
+    /** Told whenever a test value changes, so it can be remembered. */
+    var onTestValuesChanged: ((TestValues) -> Unit)? = null
+
+    /** Puts back test values remembered from before. */
+    fun restoreTestValues(values: TestValues) = inputs.restore(values)
     private val rows = object : JPanel(VerticalLayout(0)), Scrollable {
         override fun getPreferredScrollableViewportSize(): Dimension = preferredSize
         override fun getScrollableUnitIncrement(visible: Rectangle, orientation: Int, direction: Int) = JBUI.scale(16)
@@ -232,11 +241,7 @@ class TransformFormPanel(
     private fun step(node: JsonObject, path: String, number: Int) {
         val earlier = node.attributes().get("input").isTransform()
         val later = path.isNotEmpty()
-        val moves = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0)).apply {
-            isOpaque = false
-            add(iconButton("Move up", AllIcons.Actions.MoveUp) { moveStep(path, up = true) }.apply { isEnabled = earlier })
-            add(iconButton("Move down", AllIcons.Actions.MoveDown) { moveStep(path, up = false) }.apply { isEnabled = later })
-        }
+        val moves = arrows(earlier, later) { up -> moveStep(path, up) }
         operation(node, path, indent = 0, lead = "$number", chained = true, moves = moves.takeIf { earlier || later })
     }
 
@@ -329,8 +334,10 @@ class TransformFormPanel(
     private fun item(list: JsonArray, index: Int, attr: AttrDef, path: String, indent: Int) {
         val element = list.get(index)
         val childPath = TransformEvaluator.join(path, "${attr.name}[$index]")
+        val moves = arrows(earlier = index > 0, later = index < list.size() - 1) { up -> moveItem(list, index, up, path, attr.name) }
+            .takeIf { list.size() > 1 }
         if (element.isTransform()) {
-            operation(element.asJsonObject, childPath, indent, "", chained = false) {
+            operation(element.asJsonObject, childPath, indent, "", chained = false, moves = moves) {
                 list.set(index, JsonPrimitive(""))
                 changed(structural = true)
             }
@@ -344,6 +351,7 @@ class TransformFormPanel(
                 onEdit = { list.set(index, JsonPrimitive(it)); changed() },
                 onTransform = if (attr.kind == AttrKind.VALUE_LIST) ({ list.set(index, staticOf(it)); changed(structural = true) }) else null,
                 onRemove = { list.remove(index); changed(structural = true) },
+                moves = moves,
             ),
         )
     }
@@ -764,6 +772,7 @@ class TransformFormPanel(
         onEdit: (String) -> Unit,
         onTransform: ((String) -> Unit)?,
         onRemove: (() -> Unit)?,
+        moves: JComponent? = null,
     ): JComponent {
         val field = textBox(value, onEdit)
         val buttons = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(2), 0)).apply {
@@ -775,7 +784,7 @@ class TransformFormPanel(
             border = JBUI.Borders.empty(2, indentOf(indent) + ARROW_WIDTH, 2, 8)
             label?.let { addToLeft(JBLabel(it).apply { border = JBUI.Borders.emptyRight(6) }) }
             addToCenter(field)
-            addToRight(buttons)
+            addToRight(BorderLayoutPanel().apply { isOpaque = false; addToCenter(buttons); addToRight(margin(moves)) })
         }
     }
 
@@ -935,6 +944,34 @@ class TransformFormPanel(
         if (opened == path) opened = otherPath
         changed(structural = true)
     }
+
+    /** Swaps entry [index] of [list], the `name` list of the transform at [path], with the one above or below it. */
+    internal fun moveItem(list: JsonArray, index: Int, up: Boolean, path: String, name: String) {
+        val other = if (up) index - 1 else index + 1
+        if (other !in 0 until list.size()) return
+        val element = list.get(index)
+        list.set(index, list.get(other))
+        list.set(other, element)
+        // An entry that was open stays open where it went.
+        val here = TransformEvaluator.join(path, "$name[$index]")
+        val there = TransformEvaluator.join(path, "$name[$other]")
+        opened = opened?.let { open ->
+            when {
+                open == here || open.startsWith("$here.") -> there + open.removePrefix(here)
+                open == there || open.startsWith("$there.") -> here + open.removePrefix(there)
+                else -> open
+            }
+        }
+        changed(structural = true)
+    }
+
+    /** Move up and move down buttons, the one that can't move greyed out. */
+    private fun arrows(earlier: Boolean, later: Boolean, move: (up: Boolean) -> Unit): JComponent =
+        JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0)).apply {
+            isOpaque = false
+            add(iconButton("Move up", AllIcons.Actions.MoveUp) { move(true) }.apply { isEnabled = earlier })
+            add(iconButton("Move down", AllIcons.Actions.MoveDown) { move(false) }.apply { isEnabled = later })
+        }
 
     /** Takes a step out of the chain, joining what fed it to what followed it. */
     private fun removeStep(path: String) {

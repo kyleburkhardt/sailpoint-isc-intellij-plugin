@@ -95,23 +95,28 @@ object IscTest {
     /** Names the transforms saved just for a test, so any left behind are easy to spot. */
     private const val SCRATCH_PREFIX = "zz-plugin-test-"
 
-    fun state(file: IscVirtualFile): IscTestState =
-        file.getUserData(KEY) ?: IscTestState().also { file.putUserData(KEY, it) }
+    /** The test for [file], set up as it was last time when it was tested before. */
+    fun state(project: Project, file: IscVirtualFile): IscTestState =
+        file.getUserData(KEY) ?: IscTestState().also { state ->
+            state.setup = project.service<TransformTestMemory>().setup(file)
+            file.putUserData(KEY, state)
+        }
 
     /** Asks what to test against, then runs it. */
     fun setUpAndRun(project: Project, file: IscVirtualFile) {
         val transform = current(file) ?: return
-        val state = state(file)
+        val state = state(project, file)
         val setup = IscTestDialog(project, file.tenantId, state.setup, needsInput = readsImplicitInput(transform))
             .showAndChoose() ?: return
         state.setup = setup
+        project.service<TransformTestMemory>().remember(file, setup)
         run(project, file)
     }
 
     /** Runs again with the last setup, or asks for one when there isn't one or it no longer fits the transform. */
     fun run(project: Project, file: IscVirtualFile) {
         val transform = current(file) ?: return
-        val state = state(file)
+        val state = state(project, file)
         val setup = state.setup
         val needsInput = readsImplicitInput(transform)
         if (setup == null || (needsInput && !setup.hasInput)) return setUpAndRun(project, file)

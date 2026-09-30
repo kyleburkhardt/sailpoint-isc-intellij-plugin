@@ -66,6 +66,18 @@ class TestInputPanel(private val onChange: () -> Unit) {
     /** Whether [need] was read from ISC and had no value there. */
     fun isAbsent(need: NeededInput): Boolean = need in absent && values[need].isNullOrEmpty()
 
+    /** Everything typed, to be remembered. */
+    fun snapshot(): TestValues = TestValues(incoming, values.toMap(), absent.toSet())
+
+    /** Puts back what was [remembered][snapshot], alongside anything typed since. */
+    fun restore(remembered: TestValues) {
+        values.putAll(remembered.values)
+        absent += remembered.absent
+        if (incoming.isEmpty()) incoming = remembered.input
+        rebuild()
+        onChange()
+    }
+
     /** Takes the values read from a real identity, replacing what was typed for each of them. */
     fun fill(sample: IscSample) {
         sample.values.forEach { (need, value) ->

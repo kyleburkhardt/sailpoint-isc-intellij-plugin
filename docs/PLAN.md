@@ -148,24 +148,25 @@ Built so far (2026-09-22 to 2026-09-29):
     - `uuid`, `randomAlphaNumeric`, `randomNumeric`
     - `indexOf`, `lastIndexOf`, `leftPad`, `rightPad`, `replaceAll`, `getEndOfString` (as its own type and as the Cloud Services Deployment Utility rule, which also previews `generateRandomString`; any other rule says it only runs in ISC)
     - `base64Encode`, `base64Decode` (UTF-8), `decomposeDiacriticalMarks` (NFKD, then combining marks removed, as documented), `normalizeNames` (Mac is only treated as a prefix in words of 6+ letters, so Mack and Macy stay as they are; unconfirmed against ISC)
+    - `e164phone` (Google's libphonenumber), `iso3166` (bundled ISO table, public domain, plus Java's country names in English and native languages), `rfc5646` (SailPoint's published table, bundled)
+    - `displayName` (reads `preferredName`, `firstname`, `lastname`), `usernameGenerator` (shows the first pattern it can fill, with `uniqueCounter` empty; uniqueness is only checked in ISC)
     - `dateCompare`, `dateFormat`, `dateMath` (in UTC; dates are read as loosely as ISO8601 allows, and date math writes `yyyy-MM-dd'T'HH:mmZ`, e.g. `2025-01-14T06:00Z`, going by what ISC returned)
     - `reference`: the named transform is loaded from the tenant (`/transforms/v1?filters=name eq …`, cached per tenant for the session) and run on the incoming value. Tenant values read inside it get their own fields under "Read inside referenced transforms", and Test in ISC fills them. A reference step's settings have "Reload from ISC", and pushing a transform updates every open preview that references it.
   - Anything else shows "not previewed yet".
 - **Form layout:**
   - The steps are listed in the order they run, and each shows its result.
-  - Steps move up and down with arrows in a margin down the right. (Showing them on hover put mouse listeners on the row's labels, which swallowed the clicks that open a step.)
+  - Steps, and entries inside a step (e.g. First Valid's values), move up and down with arrows in a margin down the right. (Showing them on hover put mouse listeners on the row's labels, which swallowed the clicks that open a step.)
   - Account, identity and reference steps have dropdowns filled from the tenant, with the test value on the same line.
   - "Input" appears at the top only when the transform reads the value ISC passes in.
+  - Test values and the Test in ISC setup are remembered per transform in the workspace file (`TransformTestMemory`).
   - A static's variables come before its value.
 - **Test in ISC:** runs the transform in the editor on a real identity through `POST /identity-profiles/v1/identity-preview`, which is stable v1. The preview only takes a mapping an identity profile could hold (a `reference` to a saved transform); an inline operation fails with e.g. `"Transform Type" value does not exist: "displayName.static"`. So the editor's JSON is saved as a scratch transform (`zz-plugin-test-<8 hex>`), referenced, and deleted afterwards; a failed delete is reported. Before the preview, the identity's real values are read (`GET /identities/v1/{id}` for identity attributes and the manager, `GET /accounts/v1?filters=identityId eq …` for account attributes and the input, `alias eq` for other `getReferenceIdentityAttribute` uids) and fill the local test fields; values that are empty in ISC count as nothing rather than untyped. The result shows under the local one in a banner: green when they match, red with both values when they differ, amber when the preview still needs a value.
 
 To do:
-- [ ] **Phase B:** the remaining operations, which currently show "not previewed yet":
-  - display name
-  - E.164 phone, ISO 3166, RFC 5646
-  - username generator
-- [ ] **Phase C:** remembering test inputs and the Test in ISC setup between sessions (it's per open tab now).
-- [ ] Reordering entries inside a step (e.g. First Valid's values). Only the main chain moves now.
+- [ ] Check the guesses against a live tenant with Test in ISC:
+  - `displayName` reads `preferredName`, `firstname` and `lastname`; SailPoint doesn't name the attributes.
+  - `normalizeNames` only treats Mac as a prefix in words of 6+ letters.
+  - Date math output ends in `Z`, and ISO8601 output ends in `Z` rather than `+0000`.
 
 ### Deferred (user's call to pick these up)
 - [ ] **Provisioning policy JSON schema:** completion and validation for `fields`, reusing the transform schema for each field's `transform`.
