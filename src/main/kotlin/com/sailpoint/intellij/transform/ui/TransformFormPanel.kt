@@ -33,6 +33,7 @@ import com.sailpoint.intellij.api.string
 import com.sailpoint.intellij.transform.AttrDef
 import com.sailpoint.intellij.transform.AttrKind
 import com.sailpoint.intellij.transform.EvalResult
+import com.sailpoint.intellij.transform.NeededInput
 import com.sailpoint.intellij.transform.OpDef
 import com.sailpoint.intellij.transform.Trace
 import com.sailpoint.intellij.transform.TransformCatalog
@@ -145,9 +146,21 @@ class TransformFormPanel(
     }
 
     private fun refresh() {
-        inputs.update(neededInputs(model, ::referencedTransform), readsImplicitInput(model), onSteps = neededInputs(model).toSet())
+        inputs.update(neededInputs(model, ::referencedTransform), readsImplicitInput(model), onSteps = typedOnSteps(model))
         val trace = evaluate(model, inputs.context().copy(resolveTransform = ::referencedTransform))
         updaters.forEach { it(trace) }
+    }
+
+    /** The tenant values that have a test field on their own step: those read by account, identity and reference steps. */
+    private fun typedOnSteps(element: JsonElement?): Set<NeededInput> = when {
+        element == null -> emptySet()
+        element.isJsonArray -> element.asJsonArray.flatMapTo(HashSet(), ::typedOnSteps)
+        element.isJsonObject -> {
+            val node = element.asJsonObject
+            val own = if (node.string("type") in TENANT_STEPS) neededInputs(node).take(1) else emptyList()
+            own.toHashSet() + node.entrySet().flatMap { (_, child) -> typedOnSteps(child) }
+        }
+        else -> emptySet()
     }
 
     /**

@@ -2,6 +2,7 @@ package com.sailpoint.intellij.transform
 
 import com.sailpoint.intellij.transform.ops.DateOps
 import com.sailpoint.intellij.transform.ops.GeneratorOps
+import com.sailpoint.intellij.transform.ops.LocaleOps
 import com.sailpoint.intellij.transform.ops.RuleOps
 import com.sailpoint.intellij.transform.ops.StringOps
 import com.sailpoint.intellij.transform.ops.TenantOps
@@ -18,6 +19,7 @@ internal val OPERATIONS: Map<String, Op> = buildMap {
     putAll(GeneratorOps.all)
     putAll(DateOps.all)
     putAll(RuleOps.all)
+    putAll(LocaleOps.all)
 }
 
 /** The first result that isn't a plain value, which an operation propagates instead of its own answer. */

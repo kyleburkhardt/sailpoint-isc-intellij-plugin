@@ -228,7 +228,7 @@ class TransformEvaluatorTest {
 
     @Test
     fun `an operation that isn't previewed yet says so`() {
-        assertTrue(failure("""{"type":"e164phone"}""").contains("isn't previewed yet"))
+        assertTrue(failure("""{"type":"notAnOp"}""").contains("isn't a transform operation"))
         assertTrue(failure("""{"type":"nonsense"}""").contains("isn't a transform operation"))
     }
 
@@ -492,5 +492,63 @@ class TransformEvaluatorTest {
         assertValue("Jack Mack", json, "JACK MACK")
         assertValue("John Smith III", json, "john smith iii")
         assertValue("Maria de la Cruz", json, "MARIA DE LA CRUZ")
+    }
+    @Test
+    fun `e164phone formats valid numbers and gives nothing for others, as SailPoint's examples do`() {
+        assertValue("+17792842727", """{"type":"e164phone"}""", "779.284.2727")
+        assertValue("+15127772222", """{"type":"e164phone"}""", "512-777-2222")
+        assertValue("+61412345678", """{"type":"e164phone","attributes":{"defaultRegion":"AU"}}""", "0412345678")
+        assertValue(null, """{"type":"e164phone"}""", "12")
+        assertValue(null, """{"type":"e164phone"}""", "not a number")
+        assertTrue(failure("""{"type":"e164phone","attributes":{"defaultRegion":"Narnia"}}""", "0412345678").contains("region"))
+    }
+
+    @Test
+    fun `iso3166 reads names and codes and writes the format asked for, as SailPoint's examples do`() {
+        assertValue("US", """{"type":"iso3166"}""", "United States of America")
+        assertValue("724", """{"type":"iso3166","attributes":{"format":"numeric"}}""", "ES")
+        assertValue("ESP", """{"type":"iso3166","attributes":{"format":"alpha3"}}""", "España")
+        assertValue("ES", """{"type":"iso3166"}""", "spain")
+        assertValue("ES", """{"type":"iso3166"}""", "724")
+        assertValue("AF", """{"type":"iso3166"}""", "4")
+        assertValue(null, """{"type":"iso3166"}""", "Atlantis")
+    }
+
+    @Test
+    fun `rfc5646 converts through SailPoint's table`() {
+        assertValue("es", """{"type":"rfc5646"}""", "Spanish")
+        assertValue("es", """{"type":"rfc5646"}""", "SPA")
+        assertValue("en", """{"type":"rfc5646"}""", "english")
+        assertValue(null, """{"type":"rfc5646"}""", "Klingon")
+    }
+
+    @Test
+    fun `displayName prefers the preferred name over the given name, as SailPoint's examples do`() {
+        val json = """{"type":"displayName","attributes":{"input":"input"}}"""
+        val names = { preferred: String? ->
+            EvalContext(
+                identityAttributes = listOfNotNull(preferred?.let { "preferredName" to it }, "firstname" to "Jonathan", "lastname" to "Doe").toMap(),
+                absent = if (preferred == null) setOf(NeededInput(NeedKind.IDENTITY_ATTRIBUTE, "preferredName")) else emptySet(),
+            )
+        }
+        assertEquals("John Doe", (output(json, context = names("John")) as EvalResult.Value).text)
+        assertEquals("Jonathan Doe", (output(json, context = names(null)) as EvalResult.Value).text)
+        assertEquals(
+            listOf("preferredName", "firstname", "lastname").map { NeededInput(NeedKind.IDENTITY_ATTRIBUTE, it) },
+            neededInputs(transform(json)),
+        )
+    }
+
+    @Test
+    fun `usernameGenerator gives the first pattern it can fill, with no counter`() {
+        val json = """{"type":"usernameGenerator","attributes":{
+            "patterns":["${'$'}fn.${'$'}mn.${'$'}ln","${'$'}fi${'$'}ln${'$'}{uniqueCounter}"],
+            "fn":"john","mn":"","ln":"doe",
+            "fi":{"type":"substring","attributes":{"input":"john","begin":0,"end":1}}}}"""
+        assertValue("jdoe", json)
+        val first = """{"type":"usernameGenerator","attributes":{"patterns":["${'$'}fn.${'$'}ln"],"fn":"adam","ln":"smith"}}"""
+        assertValue("adam.smith", first)
+        val none = """{"type":"usernameGenerator","attributes":{"patterns":["${'$'}fn.${'$'}ln"],"fn":"adam","ln":""}}"""
+        assertTrue(failure(none).contains("No pattern"))
     }
 }

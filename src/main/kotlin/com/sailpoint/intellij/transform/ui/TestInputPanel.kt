@@ -17,8 +17,8 @@ import javax.swing.event.DocumentEvent
 
 /**
  * The values a preview runs against: the attribute flowing in, and the tenant values the transform reads. A tenant value
- * is typed on the step that reads it; one read only inside a referenced transform has no step here, so its field is
- * in this panel.
+ * is typed on the step that reads it; one with no such step (read inside a referenced transform, or by Display Name)
+ * has its field in this panel.
  */
 class TestInputPanel(private val onChange: () -> Unit) {
 
@@ -110,7 +110,7 @@ class TestInputPanel(private val onChange: () -> Unit) {
         }
         val elsewhere = needs.filter { it.kind.asksForAValue && it !in onSteps }
         if (elsewhere.isNotEmpty()) {
-            row { comment("Read inside referenced transforms:") }
+            row { comment("Other values the transform reads:") }
             elsewhere.forEach { need ->
                 row("${need.label}:") {
                     cell(field(values[need].orEmpty()) { values[need] = it; absent -= need }).align(AlignX.FILL)

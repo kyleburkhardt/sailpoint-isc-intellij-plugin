@@ -234,7 +234,7 @@ fun neededInputs(transform: JsonObject, resolve: (String) -> JsonObject? = { nul
                     if (target == null) found += NeededInput(NeedKind.TRANSFORM, referenced)
                     else if (followed.add(referenced)) walk(target)
                 } else {
-                    needOf(obj)?.let(found::add)
+                    found += needsOf(obj)
                 }
                 obj.entrySet().forEach { (_, child) -> walk(child) }
             }
@@ -300,6 +300,11 @@ private fun readsInput(type: String?): Boolean {
     val op = type?.let { TransformCatalog[it] } ?: return true
     return op.attribute("input") != null || type == "reference" || type == "rule"
 }
+
+/** The tenant values this node reads. */
+private fun needsOf(node: JsonObject): List<NeededInput> =
+    if (node.string("type") == "displayName") TenantOps.DISPLAY_NAME_PARTS.map { NeededInput(NeedKind.IDENTITY_ATTRIBUTE, it) }
+    else listOfNotNull(needOf(node))
 
 /** The tenant value this node reads, if it reads one. */
 private fun needOf(node: JsonObject): NeededInput? {

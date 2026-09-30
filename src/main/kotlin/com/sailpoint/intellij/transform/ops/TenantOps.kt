@@ -19,7 +19,14 @@ internal object TenantOps {
         "accountAttribute" to Op(::accountAttribute),
         "getReferenceIdentityAttribute" to Op(::referenceAttribute),
         "reference" to Op(::reference),
+        "displayName" to Op(::displayName),
     )
+
+    /**
+     * The identity attributes `displayName` reads. SailPoint doesn't name them; these are ISC's usual first and last
+     * name attributes, and the preferred name the docs describe.
+     */
+    val DISPLAY_NAME_PARTS = listOf("preferredName", "firstname", "lastname")
 
     /** The source an `accountAttribute` reads from, by whichever of its three names the transform uses. */
     fun accountSource(attributes: JsonObject): String? =
@@ -50,6 +57,16 @@ internal object TenantOps {
         val name = call.text("id") ?: return call.missing("id")
         val transform = call.context.resolveTransform(name) ?: return EvalResult.Needs(NeededInput(NeedKind.TRANSFORM, name))
         return call.runReferenced(name, transform)
+    }
+
+    /** The preferred name, or else the given name, then the family name: "John Doe". */
+    private fun displayName(call: OpCall): EvalResult {
+        val (preferred, given, family) = DISPLAY_NAME_PARTS.map { name ->
+            supplied(call, call.context.identityAttributes[name], NeededInput(NeedKind.IDENTITY_ATTRIBUTE, name))
+        }
+        listOf(preferred, given, family).firstOrNull { it !is EvalResult.Value }?.let { return it }
+        val first = preferred.textOrNull?.takeIf { it.isNotBlank() } ?: given.textOrNull
+        return EvalResult.Value(listOfNotNull(first, family.textOrNull).filter { it.isNotBlank() }.joinToString(" ").ifEmpty { null })
     }
 
     /** The test value for [need], nothing when it's known to be empty, or else a request for one. */

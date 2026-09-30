@@ -21,6 +21,8 @@ dependencies {
         bundledPlugin("com.intellij.modules.json")
         testFramework(TestFrameworkType.Platform)
     }
+    // E.164 phone numbers, as ISC formats them.
+    implementation("com.googlecode.libphonenumber:libphonenumber:9.0.40")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.opentest4j:opentest4j:1.3.0")
 }
