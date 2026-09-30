@@ -171,6 +171,18 @@ class TransformEvaluatorTest {
     }
 
     @Test
+    fun `a tenant value known to be empty gives nothing instead of asking for it`() {
+        val json = """{"type":"firstValid","attributes":{"values":[
+            {"type":"identityAttribute","attributes":{"name":"nickname"}},
+            {"type":"identityAttribute","attributes":{"name":"firstname"}}]}}"""
+        val context = EvalContext(
+            identityAttributes = mapOf("firstname" to "Alex"),
+            absent = setOf(NeededInput(NeedKind.IDENTITY_ATTRIBUTE, "nickname")),
+        )
+        assertEquals("Alex", (output(json, context = context) as EvalResult.Value).text)
+    }
+
+    @Test
     fun `an account attribute is asked for by source, then used once supplied`() {
         val json = """{"type":"lower","attributes":{"input":
             {"type":"accountAttribute","attributes":{"sourceName":"Workday","attributeName":"DEPARTMENT"}}}}"""
@@ -216,7 +228,7 @@ class TransformEvaluatorTest {
 
     @Test
     fun `an operation that isn't previewed yet says so`() {
-        assertTrue(failure("""{"type":"dateMath","attributes":{"expression":"now"}}""").contains("isn't previewed yet"))
+        assertTrue(failure("""{"type":"base64Encode"}""").contains("isn't previewed yet"))
         assertTrue(failure("""{"type":"nonsense"}""").contains("isn't a transform operation"))
     }
 
@@ -294,5 +306,164 @@ class TransformEvaluatorTest {
         val static = transform("""{"type":"static","attributes":{"value":"x"}}""")
         assertEquals(static.toString(), withImplicitInput(static, input).toString())
         assertFalse(readsImplicitInput(withImplicitInput(transform("""{"type":"lower"}"""), input)))
+    }
+    @Test
+    fun `dateFormat converts between patterns and named formats, as SailPoint's examples do`() {
+        assertValue("1975-04-01", """{"type":"dateFormat","attributes":{"inputFormat":"M/d/yyyy","outputFormat":"yyyy-MM-dd"}}""", "4/1/1975")
+        assertValue(
+            "1974-08-02T02:30:32.190Z",
+            """{"type":"dateFormat","attributes":{"inputFormat":"EPOCH_TIME_JAVA","outputFormat":"ISO8601"}}""",
+            "144642632190",
+        )
+        assertValue("2025-01-14T00:00:00.000Z", """{"type":"dateFormat","attributes":{"inputFormat":"PEOPLE_SOFT"}}""", "01/14/2025")
+        assertTrue(failure("""{"type":"dateFormat","attributes":{"inputFormat":"MM/dd/yyyy"}}""", "soon").contains("doesn't match"))
+    }
+
+    @Test
+    fun `dateFormat round-trips Windows file times`() {
+        val json = """{"type":"dateFormat","attributes":{"inputFormat":"ISO8601","outputFormat":"EPOCH_TIME_WIN32"}}"""
+        assertValue("116444736000000000", json, "1970-01-01T00:00:00.000Z")
+    }
+
+    @Test
+    fun `dateMath adds, subtracts and rounds from left to right`() {
+        val math = { expression: String, roundUp: Boolean ->
+            """{"type":"dateMath","attributes":{"expression":"$expression","roundUp":$roundUp}}"""
+        }
+        assertValue("2025-01-14T12:00Z", math("+12h/h", false), "2025-01-14T00:30:00.000Z")
+        assertValue("2025-01-15T00:00Z", math("/d", true), "2025-01-14T08:00:00.000Z")
+        assertValue("2025-01-13T20:00Z", math("-5h/h", false), "2025-01-14T01:30Z")
+        // A month on from 31 January is 28 February, the last day there is.
+        assertValue("2025-02-01T00:00Z", math("+1M/M", false), "2025-01-31T00:00Z")
+        assertTrue(failure(math("/w", false), "2025-01-14T00:00Z").contains("week"))
+        assertTrue(failure(math("+1d", false), "01/14/2025").contains("ISO8601"))
+    }
+
+    @Test
+    fun `dateMath with now ignores the input`() {
+        val context = EvalContext(input = "2000-01-01T00:00Z", now = java.time.Instant.parse("2025-06-01T10:15:30Z"))
+        val json = """{"type":"dateMath","attributes":{"expression":"now-5d/d"}}"""
+        assertEquals("2025-05-27T00:00Z", (output(json, context = context) as EvalResult.Value).text)
+    }
+
+    @Test
+    fun `a reference runs the named transform on the value flowing in`() {
+        val toEst = transform("""{"name":"UTC To EST","type":"dateMath","attributes":{"expression":"-5h"}}""")
+        val json = """{"type":"reference","attributes":{"id":"UTC To EST","input":
+            {"type":"dateFormat","attributes":{"inputFormat":"MM/dd/yyyy","outputFormat":"ISO8601","input":"01/14/2025"}}}}"""
+        assertEquals(NeededInput(NeedKind.TRANSFORM, "UTC To EST"), (output(json) as EvalResult.Needs).need)
+        val context = EvalContext(resolveTransform = { name -> toEst.takeIf { name == "UTC To EST" } })
+        assertEquals("2025-01-13T19:00Z", (output(json, context = context) as EvalResult.Value).text)
+    }
+
+    @Test
+    fun `a reference to itself stops instead of running forever`() {
+        val loop = transform("""{"name":"Loop","type":"reference","attributes":{"id":"Loop"}}""")
+        val result = output(loop.toString(), context = EvalContext(resolveTransform = { loop }))
+        assertTrue(result.toString(), result is EvalResult.Failure)
+    }
+    @Test
+    fun `indexOf and lastIndexOf find a substring, as SailPoint's examples do`() {
+        assertValue("0", """{"type":"indexOf","attributes":{"substring":"admin_"}}""", "admin_jsmith")
+        assertValue("1", """{"type":"indexOf","attributes":{"substring":"b"}}""", "abcabcabc")
+        assertValue("7", """{"type":"lastIndexOf","attributes":{"substring":"b"}}""", "abcabcabc")
+        assertValue("-1", """{"type":"indexOf","attributes":{"substring":"z"}}""", "abc")
+    }
+
+    @Test
+    fun `leftPad and rightPad fill out to a length`() {
+        assertValue("00001234", """{"type":"leftPad","attributes":{"padding":"0","length":"8"}}""", "1234")
+        assertValue("xxx1234", """{"type":"leftPad","attributes":{"padding":"x","length":"7"}}""", "1234")
+        assertValue("12340000", """{"type":"rightPad","attributes":{"padding":"0","length":"8"}}""", "1234")
+        assertValue("  ab", """{"type":"leftPad","attributes":{"length":"4"}}""", "ab")
+        assertValue("abcdef", """{"type":"leftPad","attributes":{"length":"3"}}""", "abcdef")
+        assertValue("ababx", """{"type":"leftPad","attributes":{"padding":"ab","length":"5"}}""", "x")
+        assertValue(null, """{"type":"rightPad","attributes":{"length":"8"}}""")
+    }
+
+    @Test
+    fun `replaceAll applies each pattern in turn, as SailPoint's examples do`() {
+        assertValue("512-777-1234", """{"type":"replaceAll","attributes":{"table":{"[.]":"-","[a-zA-z]":""}}}""", "ad512.777.1234")
+        assertValue("Enrique Jose Pinon", """{"type":"replaceAll","attributes":{"table":{"-":" ","\"":"'","ñ":"n"}}}""", "Enrique Jose-Piñon")
+        assertValue("same", """{"type":"replaceAll","attributes":{}}""", "same")
+    }
+
+    @Test
+    fun `getEndOfString takes the last characters, as a type or through the utility rule`() {
+        assertValue("1234", """{"type":"getEndOfString","attributes":{"numChars":"4"}}""", "abcd1234")
+        assertValue(null, """{"type":"getEndOfString","attributes":{"numChars":"16"}}""", "This is a test.")
+        val rule = """{"type":"rule","attributes":{"name":"Cloud Services Deployment Utility","operation":"getEndOfString","numChars":"4"}}"""
+        assertValue("1234", rule, "abcd1234")
+        assertTrue(neededInputs(transform(rule)).isEmpty())
+    }
+
+    @Test
+    fun `the utility rule generates random strings from the characters asked for`() {
+        val json = """{"type":"rule","attributes":{"name":"Cloud Services Deployment Utility","operation":"generateRandomString",
+            "includeNumbers":"false","includeSpecialChars":"false","length":"16"}}"""
+        val text = (output(json) as EvalResult.Value).text.orEmpty()
+        assertEquals(16, text.length)
+        assertTrue(text, text.all { it.isLetter() })
+    }
+
+    @Test
+    fun `any other rule says it only runs in ISC`() {
+        val json = """{"type":"rule","attributes":{"name":"My Custom Rule"}}"""
+        assertEquals(NeededInput(NeedKind.RULE, "My Custom Rule"), (output(json) as EvalResult.Needs).need)
+    }
+
+    @Test
+    fun `dateCompare picks a condition by comparing two dates`() {
+        val compare = { first: String, operator: String, second: String ->
+            """{"type":"dateCompare","attributes":{"firstDate":$first,"secondDate":$second,"operator":"$operator",
+                "positiveCondition":"yes","negativeCondition":"no"}}"""
+        }
+        assertValue("yes", compare("\"2025-01-14T00:00:00.000Z\"", "lt", "\"2025-01-15T00:00Z\""))
+        assertValue("no", compare("\"2025-01-14T00:00:00.000Z\"", "GT", "\"2025-01-15T00:00Z\""))
+        assertValue("yes", compare("\"2025-01-14T00:00Z\"", "LTE", "\"2025-01-14T00:00:00.000Z\""))
+        assertValue("no", compare("\"2025-01-14T00:00Z\"", "LT", "\"2025-01-14T00:00:00.000Z\""))
+        // SailPoint's example: hired on or before the end of 1995 is "legacy".
+        val legacy = compare(
+            "\"1990-05-01T00:00:00.000Z\"",
+            "lte",
+            """{"type":"dateFormat","attributes":{"input":"12/31/1995","inputFormat":"M/d/yyyy","outputFormat":"ISO8601"}}""",
+        )
+        assertValue("yes", legacy)
+    }
+
+    @Test
+    fun `dateCompare reads now as the current time and says when a date isn't one`() {
+        val json = """{"type":"dateCompare","attributes":{"firstDate":"2025-01-01T00:00Z","secondDate":"now","operator":"LT",
+            "positiveCondition":"started","negativeCondition":"not yet"}}"""
+        val context = EvalContext(now = java.time.Instant.parse("2025-06-01T00:00:00Z"))
+        assertEquals("started", (output(json, context = context) as EvalResult.Value).text)
+        val bad = """{"type":"dateCompare","attributes":{"firstDate":"01/14/2025","secondDate":"now","operator":"LT",
+            "positiveCondition":"a","negativeCondition":"b"}}"""
+        assertTrue(failure(bad).contains("ISO8601"))
+    }
+    @Test
+    fun `what a referenced transform reads is needed too, and a missing one is asked for`() {
+        val shared = transform("""{"name":"Dept","type":"upper","attributes":{"input":
+            {"type":"accountAttribute","attributes":{"sourceName":"HR","attributeName":"dept"}}}}""")
+        val json = transform("""{"type":"concat","attributes":{"values":[
+            {"type":"reference","attributes":{"id":"Dept"}},
+            {"type":"reference","attributes":{"id":"Gone"}}]}}""")
+        assertEquals(
+            listOf(NeededInput(NeedKind.ACCOUNT_ATTRIBUTE, "dept", "HR"), NeededInput(NeedKind.TRANSFORM, "Gone")),
+            neededInputs(json) { name -> shared.takeIf { name == "Dept" } },
+        )
+        assertEquals(
+            listOf(NeededInput(NeedKind.TRANSFORM, "Dept"), NeededInput(NeedKind.TRANSFORM, "Gone")),
+            neededInputs(json),
+        )
+    }
+
+    @Test
+    fun `transforms that reference each other are followed once`() {
+        val a = transform("""{"name":"A","type":"reference","attributes":{"id":"B"}}""")
+        val b = transform("""{"name":"B","type":"concat","attributes":{"values":[
+            {"type":"identityAttribute","attributes":{"name":"uid"}},{"type":"reference","attributes":{"id":"A"}}]}}""")
+        val needs = neededInputs(a) { name -> if (name == "A") a else b }
+        assertEquals(listOf(NeededInput(NeedKind.IDENTITY_ATTRIBUTE, "uid")), needs)
     }
 }

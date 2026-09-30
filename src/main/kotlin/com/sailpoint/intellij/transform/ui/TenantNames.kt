@@ -7,6 +7,7 @@ import com.intellij.openapi.diagnostic.logger
 import com.sailpoint.intellij.api.IscClient
 import com.sailpoint.intellij.api.ResourceKind
 import com.sailpoint.intellij.api.string
+import com.google.gson.JsonObject
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 
@@ -19,6 +20,9 @@ interface TenantNames {
     fun sources(onLoaded: (List<String>) -> Unit)
     fun accountAttributes(source: String, onLoaded: (List<String>) -> Unit)
     fun identityAttributes(onLoaded: (List<String>) -> Unit)
+
+    /** The saved transform named [name], for the preview to run where a `reference` points; null when there isn't one. */
+    fun transform(name: String, onLoaded: (JsonObject?) -> Unit) = onLoaded(null)
 }
 
 /** [TenantNames] read from a tenant, kept for the session so every transform opened on it shares one load. */
@@ -41,6 +45,8 @@ class IscTenantNames private constructor(private val tenantId: String) : TenantN
 
     private val accounts = ConcurrentHashMap<String, CompletableFuture<List<String>>>()
 
+    private val transforms = ConcurrentHashMap<String, CompletableFuture<JsonObject?>>()
+
     override fun sources(onLoaded: (List<String>) -> Unit) = sourceIds.answer(onLoaded) { it.keys.sortedBy(String::lowercase) }
 
     override fun identityAttributes(onLoaded: (List<String>) -> Unit) = identity.answer(onLoaded) { it }
@@ -57,6 +63,21 @@ class IscTenantNames private constructor(private val tenantId: String) : TenantN
                 emptyList()
             }
         }.answer(onLoaded) { it }
+    }
+
+    override fun transform(name: String, onLoaded: (JsonObject?) -> Unit) {
+        val loading = transforms.computeIfAbsent(name) {
+            CompletableFuture.supplyAsync(
+                { client.transformByName(tenantId, name) },
+                { ApplicationManager.getApplication().executeOnPooledThread(it) },
+            )
+        }
+        // A failed load isn't kept, so the next preview asks again.
+        loading.whenComplete { _, error -> if (error != null) transforms.remove(name, loading) }
+        loading.whenComplete { value, error ->
+            if (error != null) LOG.info("Couldn't load the transform '$name'", error)
+            ApplicationManager.getApplication().invokeLater({ onLoaded(value) }, ModalityState.any())
+        }
     }
 
     private fun com.google.gson.JsonArray?.orEmptyNames(): List<String> =

@@ -18,6 +18,12 @@ internal object StringOps {
         "substring" to Op(::substring),
         "replace" to Op(::replace),
         "split" to Op(::split),
+        "indexOf" to Op { call -> indexOf(call) { input, text -> input.indexOf(text) } },
+        "lastIndexOf" to Op { call -> indexOf(call) { input, text -> input.lastIndexOf(text) } },
+        "leftPad" to Op { call -> pad(call, left = true) },
+        "rightPad" to Op { call -> pad(call, left = false) },
+        "replaceAll" to Op(::replaceAll),
+        "getEndOfString" to Op(::getEndOfString),
     )
 
     /** Applies [transform] to the incoming value; nothing in means nothing out. */
@@ -63,6 +69,56 @@ internal object StringOps {
         } catch (e: RuntimeException) {
             EvalResult.Failure("\"$replacement\" isn't a valid replacement: ${e.message}.")
         }
+    }
+
+    /** Where the `substring` attribute is in the input, by [find]; -1 when it isn't there. */
+    private fun indexOf(call: OpCall, find: (String, String) -> Int): EvalResult {
+        val text = call.text("substring") ?: return call.missing("substring")
+        val input = call.input ?: return EvalResult.Value(null)
+        return EvalResult.Value(find(input, text).toString())
+    }
+
+    /** Pads the input out to `length` with `padding` (a space by default); a longer input is left as it is. */
+    private fun pad(call: OpCall, left: Boolean): EvalResult {
+        val length = call.int("length") ?: return if (call.raw("length") == null) call.missing("length")
+            else EvalResult.Failure("Length has to be a whole number.")
+        val padding = call.text("padding")?.takeIf { it.isNotEmpty() } ?: " "
+        val input = call.input ?: return EvalResult.Value(null)
+        val needed = length - input.length
+        if (needed <= 0) return EvalResult.Value(input)
+        // A padding of several characters repeats and is cut to fit, as Apache Commons' leftPad and rightPad do.
+        val fill = padding.repeat(needed / padding.length + 1).take(needed)
+        return EvalResult.Value(if (left) fill + input else input + fill)
+    }
+
+    /** Each pattern in the table replaced by its value, in the table's order. No table leaves the input as it is. */
+    private fun replaceAll(call: OpCall): EvalResult {
+        val input = call.input ?: return EvalResult.Value(null)
+        val table = call.raw("table")?.takeIf { it.isJsonObject }?.asJsonObject ?: return EvalResult.Value(input)
+        var result: String = input
+        for ((pattern, replacement) in table.entrySet()) {
+            val regex = try {
+                Regex(pattern)
+            } catch (e: PatternSyntaxException) {
+                return EvalResult.Failure("\"$pattern\" isn't a valid regular expression: ${e.description}.")
+            }
+            val with = replacement.takeUnless { it.isJsonNull }?.asString.orEmpty()
+            result = try {
+                regex.replace(result, with)
+            } catch (e: RuntimeException) {
+                return EvalResult.Failure("\"$with\" isn't a valid replacement: ${e.message}.")
+            }
+        }
+        return EvalResult.Value(result)
+    }
+
+    /** The last `numChars` characters; nothing when the input is shorter than that. */
+    internal fun getEndOfString(call: OpCall): EvalResult {
+        val count = call.int("numChars") ?: return if (call.raw("numChars") == null) call.missing("numChars")
+            else EvalResult.Failure("The number of characters has to be a whole number.")
+        val input = call.input ?: return EvalResult.Value(null)
+        if (count < 0) return EvalResult.Failure("The number of characters can't be negative.")
+        return EvalResult.Value(if (count > input.length) null else input.takeLast(count))
     }
 
     private fun split(call: OpCall): EvalResult {

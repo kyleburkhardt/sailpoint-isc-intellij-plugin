@@ -88,6 +88,10 @@ class TransformFormPanel(
     }
     private val updaters = mutableListOf<(Trace) -> Unit>()
 
+    /** Transforms that `reference` steps point to, by name, as loaded from the tenant (null: not there). */
+    private val referenced = HashMap<String, JsonObject?>()
+    private val requested = HashSet<String>()
+
     /** Running the transform in ISC, when the form belongs to a tenant; without it there's no ISC line. */
     var iscTest: IscTestActions? = null
 
@@ -129,9 +133,27 @@ class TransformFormPanel(
     }
 
     private fun refresh() {
-        inputs.update(neededInputs(model), readsImplicitInput(model))
-        val trace = evaluate(model, inputs.context())
+        inputs.update(neededInputs(model, ::referencedTransform), readsImplicitInput(model), onSteps = neededInputs(model).toSet())
+        val trace = evaluate(model, inputs.context().copy(resolveTransform = ::referencedTransform))
         updaters.forEach { it(trace) }
+    }
+
+    /**
+     * The saved transform a `reference` points to, once it has loaded. The first ask starts the load and the preview
+     * runs again when it arrives; until then, and when the tenant has no such transform, the reference asks for it.
+     */
+    private fun referencedTransform(name: String): JsonObject? {
+        if (name in referenced) return referenced[name]
+        if (tenant != null && requested.add(name)) {
+            // An answer that comes straight back is used by this preview; only a later one needs another run.
+            var asking = true
+            tenant.transform(name) { loaded ->
+                referenced[name] = loaded
+                if (!asking) refresh()
+            }
+            asking = false
+        }
+        return referenced[name]
     }
 
     private fun changed(structural: Boolean = false) {
@@ -185,16 +207,10 @@ class TransformFormPanel(
     private fun step(node: JsonObject, path: String, number: Int) {
         val earlier = node.attributes().get("input").isTransform()
         val later = path.isNotEmpty()
-        val arrows = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+        val moves = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0)).apply {
             isOpaque = false
             add(iconButton("Move up", AllIcons.Actions.MoveUp) { moveStep(path, up = true) }.apply { isEnabled = earlier })
             add(iconButton("Move down", AllIcons.Actions.MoveDown) { moveStep(path, up = false) }.apply { isEnabled = later })
-        }
-        // Holds the arrows' space while they're hidden, so the row doesn't shift when they appear.
-        val moves = JPanel(BorderLayout()).apply {
-            isOpaque = false
-            preferredSize = arrows.preferredSize
-            add(arrows, BorderLayout.CENTER)
         }
         operation(node, path, indent = 0, lead = "$number", chained = true, moves = moves.takeIf { earlier || later })
     }
@@ -328,15 +344,20 @@ class TransformFormPanel(
         }
     }.apply { border = JBUI.Borders.empty(4, indentOf(0) + JBUI.scale(20), 4, 8) }
 
-    /** Shows how the last test in ISC went, under the preview's own result. */
+    /**
+     * Shows how the last test in ISC went, under the preview's own result. A new result brings the identity's real
+     * values into the test fields, so the preview runs on the same data ISC did.
+     */
     fun showIscOutcome(outcome: IscTestOutcome?) {
+        val fresh = outcome !== iscOutcome
         iscOutcome = outcome
-        refresh()
+        val sample = (outcome as? IscTestOutcome.Done)?.sample ?: (outcome as? IscTestOutcome.Failed)?.sample
+        if (fresh && sample != null) inputs.fill(sample) else refresh()
     }
 
     /**
-     * ISC's answer for the transform, next to the preview's: the identity it ran on, its value and any errors, whether
-     * it agrees with the preview, and whether the transform has changed since.
+     * ISC's answer for the transform, next to the preview's: a banner saying whether they agree, then anything ISC or
+     * the lookup reported, and whether the transform has changed since.
      */
     private fun fillIscRow(trace: Trace) {
         val actions = iscTest ?: return
@@ -346,33 +367,21 @@ class TransformFormPanel(
         when (outcome) {
             null -> Unit
             is IscTestOutcome.Running -> lines += "ISC · ${outcome.setup.identityName}: running…" to UIUtil.getContextHelpForeground()
-            is IscTestOutcome.Failed -> lines += "ISC · ${outcome.setup.identityName}: ${outcome.message}" to JBColor.RED
+            is IscTestOutcome.Failed -> {
+                iscRow.add(banner(Verdict.ERROR, "ISC · ${outcome.setup.identityName}: the test failed", listOf(outcome.message)))
+                outcome.sample?.notes?.forEach { lines += it to UIUtil.getContextHelpForeground() }
+            }
             is IscTestOutcome.Done -> {
-                lines += "ISC · ${outcome.setup.identityName}: ${outcome.value?.let { "\"$it\"" } ?: "nothing"}" to UIUtil.getLabelForeground()
+                iscRow.add(comparison(outcome, trace.result))
                 outcome.errors.forEach { lines += it to JBColor.RED }
-                outcome.previousValue?.let { lines += "Now in ${outcome.setup.attribute}: \"$it\"" to UIUtil.getContextHelpForeground() }
-                val local = trace.result
-                if (local is EvalResult.Value && local.text != outcome.value) {
-                    lines += "The preview above differs from ISC." to UIUtil.getContextHelpForeground()
-                }
+                outcome.sample?.notes?.forEach { lines += it to UIUtil.getContextHelpForeground() }
             }
         }
         val sent = (outcome as? IscTestOutcome.Done)?.sent ?: (outcome as? IscTestOutcome.Failed)?.sent
         if (sent != null && sent != actions.current()) {
             lines += "Run before your latest edits." to UIUtil.getContextHelpForeground()
         }
-        lines.forEach { (text, color) ->
-            iscRow.add(
-                JBTextArea(text).apply {
-                    isEditable = false
-                    isOpaque = false
-                    lineWrap = true
-                    border = JBUI.Borders.empty()
-                    font = UIUtil.getLabelFont()
-                    foreground = color
-                },
-            )
-        }
+        lines.forEach { (text, color) -> iscRow.add(wrapped(text, color)) }
         iscRow.add(
             JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(12), 0)).apply {
                 isOpaque = false
@@ -384,6 +393,63 @@ class TransformFormPanel(
         iscRow.revalidate()
         iscRow.repaint()
     }
+
+    /** Whether the preview above agrees with ISC's value, with the two values one above the other. */
+    private fun comparison(outcome: IscTestOutcome.Done, local: EvalResult): JComponent {
+        val isc = "ISC · ${outcome.setup.identityName}: ${outcome.value.shown()}"
+        return when (local) {
+            is EvalResult.Value -> {
+                val values = listOf("Preview: ${local.text.shown()}", isc)
+                if (local.text.orEmpty() == outcome.value.orEmpty()) banner(Verdict.MATCH, "Matches ISC", values)
+                else banner(Verdict.ERROR, "Differs from ISC", values)
+            }
+            is EvalResult.Needs ->
+                banner(Verdict.WARNING, "Not compared", listOf("Preview: needs a value. ${local.need.prompt}", isc))
+            is EvalResult.Failure ->
+                banner(Verdict.ERROR, "Not compared", listOf("Preview: failed. ${local.message}", isc))
+        }
+    }
+
+    private enum class Verdict { MATCH, WARNING, ERROR }
+
+    /** A tinted box with an icon and a headline, and smaller lines under it. */
+    private fun banner(verdict: Verdict, headline: String, details: List<String>): JComponent {
+        val (icon, background, border) = when (verdict) {
+            Verdict.MATCH -> Triple(AllIcons.General.InspectionsOK, JBUI.CurrentTheme.Banner.SUCCESS_BACKGROUND, JBUI.CurrentTheme.Banner.SUCCESS_BORDER_COLOR)
+            Verdict.WARNING -> Triple(AllIcons.General.Warning, JBUI.CurrentTheme.Banner.WARNING_BACKGROUND, JBUI.CurrentTheme.Banner.WARNING_BORDER_COLOR)
+            Verdict.ERROR -> Triple(AllIcons.General.Error, JBUI.CurrentTheme.Banner.ERROR_BACKGROUND, JBUI.CurrentTheme.Banner.ERROR_BORDER_COLOR)
+        }
+        val text = JPanel(VerticalLayout(JBUI.scale(2))).apply {
+            isOpaque = false
+            add(wrapped(headline, UIUtil.getLabelForeground()).apply { font = font.deriveFont(java.awt.Font.BOLD) })
+            details.forEach { add(wrapped(it, UIUtil.getLabelForeground())) }
+        }
+        return BorderLayoutPanel().apply {
+            this.background = background
+            isOpaque = true
+            this.border = JBUI.Borders.compound(
+                JBUI.Borders.customLine(border, 1),
+                JBUI.Borders.empty(6, 8),
+            )
+            addToLeft(JBLabel(icon).apply { verticalAlignment = javax.swing.SwingConstants.TOP; this.border = JBUI.Borders.emptyRight(8) })
+            addToCenter(text)
+        }.let { box ->
+            // Space between the banner and the lines under it.
+            BorderLayoutPanel().apply { isOpaque = false; this.border = JBUI.Borders.emptyBottom(6); addToCenter(box) }
+        }
+    }
+
+    /** Text that wraps and can be selected and copied. */
+    private fun wrapped(text: String, color: java.awt.Color) = JBTextArea(text).apply {
+        isEditable = false
+        isOpaque = false
+        lineWrap = true
+        border = JBUI.Borders.empty()
+        font = UIUtil.getLabelFont()
+        foreground = color
+    }
+
+    private fun String?.shown(): String = this?.let { "\"$it\"" } ?: "nothing"
 
     /** The final result in full: wrapped rather than cut short, and selectable so it can be copied. */
     private fun resultRow(): JComponent {
@@ -435,7 +501,6 @@ class TransformFormPanel(
             add(JBLabel(if (open) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight))
             if (lead.isNotEmpty()) add(JBLabel(lead).apply { foreground = UIUtil.getContextHelpForeground() })
             add(JBLabel(title))
-            moves?.let(::add)
         }
         val summary = JBLabel(detail).apply {
             foreground = UIUtil.getContextHelpForeground()
@@ -446,7 +511,7 @@ class TransformFormPanel(
             border = JBUI.Borders.empty(2, indentOf(indent), 2, 8)
             addToLeft(left)
             addToCenter(summary)
-            addToRight(value)
+            addToRight(BorderLayoutPanel().apply { isOpaque = false; addToCenter(value); addToRight(margin(moves)) })
             isOpaque = true
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             addMouseListener(
@@ -465,7 +530,6 @@ class TransformFormPanel(
                 },
             )
             background = UIUtil.getPanelBackground()
-            moves?.let { revealOnHover(this, it, open) }
         }
     }
 
@@ -489,7 +553,6 @@ class TransformFormPanel(
             add(JBLabel(if (open) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight))
             if (lead.isNotEmpty()) add(JBLabel(lead).apply { foreground = UIUtil.getContextHelpForeground() })
             add(JBLabel(step.title).apply { toolTipText = TransformCatalog[node.string("type")]?.label })
-            moves?.let(::add)
         }
         val names = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
             isOpaque = false
@@ -555,6 +618,8 @@ class TransformFormPanel(
                 test.text = typed
                 syncing = false
             }
+            val absent = neededInputs(node).firstOrNull()?.let(inputs::isAbsent) == true
+            test.emptyText.text = if (absent) "empty in ISC" else "test value"
             val failure = trace.at(path)?.result as? EvalResult.Failure
             test.putClientProperty("JComponent.outline", failure?.let { "error" })
             test.toolTipText = failure?.message ?: "The value to preview with. ISC reads the real one from the tenant."
@@ -572,13 +637,13 @@ class TransformFormPanel(
                     addToCenter(BorderLayoutPanel().apply { isOpaque = false; border = JBUI.Borders.emptyLeft(6); addToCenter(test) })
                 },
             )
+            addToRight(margin(moves))
             isOpaque = true
             background = UIUtil.getPanelBackground()
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             addMouseListener(object : MouseAdapter() {
                 override fun mouseClicked(e: MouseEvent) = onClick()
             })
-            moves?.let { revealOnHover(this, it, open) }
         }
     }
 
@@ -654,28 +719,16 @@ class TransformFormPanel(
     }
 
     /**
-     * Shows a step's move arrows only while the pointer is over its row, or while the step is open. [moves] keeps its
-     * size either way; only the arrows inside it come and go.
+     * The strip down the right of every step and operation row, holding a step's move arrows. It's the same width on
+     * every row, arrows or not, so the values beside it line up.
      */
-    private fun revealOnHover(row: JComponent, moves: JComponent, open: Boolean) {
-        val arrows = moves.getComponent(0)
-        arrows.isVisible = open
-        if (open) return
-        val tracker = object : MouseAdapter() {
-            // Moving onto a child leaves the row, so check where the pointer really is.
-            override fun mouseEntered(e: MouseEvent) = update()
-            override fun mouseExited(e: MouseEvent) = update()
-
-            fun update() {
-                arrows.isVisible = row.getMousePosition(true) != null
-            }
-        }
-        // Children that handle the mouse themselves (fields, dropdowns, tooltips) don't pass their exits on, so each is told.
-        fun listen(component: java.awt.Component) {
-            component.addMouseListener(tracker)
-            (component as? java.awt.Container)?.components?.forEach(::listen)
-        }
-        listen(row)
+    private fun margin(moves: JComponent?): JComponent = JPanel(BorderLayout()).apply {
+        isOpaque = false
+        border = JBUI.Borders.emptyLeft(6)
+        moves?.let { add(it, BorderLayout.CENTER) }
+        val width = MOVES_WIDTH + JBUI.scale(6)
+        preferredSize = Dimension(width, moves?.preferredSize?.height ?: 0)
+        minimumSize = preferredSize
     }
 
     /** A plain value, edited where it sits, with the value it contributes on the right. */
@@ -1000,6 +1053,9 @@ class TransformFormPanel(
         const val SUMMARY_LENGTH = 40
         const val VALUE_LENGTH = 36
         val ARROW_WIDTH: Int get() = AllIcons.General.ArrowRight.iconWidth + JBUI.scale(6)
+
+        /** Room for the move up and move down buttons side by side. */
+        val MOVES_WIDTH: Int get() = 2 * InplaceButton("", AllIcons.Actions.MoveUp) {}.preferredSize.width
     }
 }
 
