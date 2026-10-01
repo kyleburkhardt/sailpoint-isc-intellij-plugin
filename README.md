@@ -41,10 +41,11 @@ Right-click for what fits each item:
 
 A transform opens on a form, with its JSON beside it. Both edit the same document, so you can use either and push the result.
 
-- **Steps in order:** the form lists the steps in the order they run, and shows what each one produces for your test values as you type. Hover over a step to move it up or down, or click it to change its operation and settings.
-- **Tenant lookups:** account, identity and reference steps pick their source and attribute from dropdowns filled from your tenant. The test value to preview with sits on the same line.
-- **Local preview:** runs in the plugin. It covers the common operations: concatenation, conditional, first valid, join, lookup, lower and upper, replace, split, static, substring, trim, the account, identity and reference attributes, UUID and the random generators. The others show "not previewed yet" for now.
-- **Test in ISC…** (in the banner): runs the transform as it is in the editor, unpushed edits included, on a real identity through ISC's identity profile preview. Nothing is saved. ISC's answer shows under the local one, and is flagged when they disagree.
+- **Steps in order:** the form lists the steps in the order they run, and shows what each one produces for your test values as you type. Click a step to change its operation and settings. Steps, and entries inside a step such as First Valid's values, move up and down with the arrows on the right.
+- **Tenant lookups:** account, identity and reference steps pick their source and attribute from dropdowns filled from your tenant. The test value to preview with sits on the same line. Values with no step of their own, such as those read inside a referenced transform, have fields at the top.
+- **Local preview:** runs in the plugin and covers every documented operation, including dates, padding, phone numbers (E.164), country and language codes, and transforms you reference by name, which are loaded from your tenant. Custom rules only run in ISC, and the username generator shows the first name it would try, since only ISC can check whether it's taken.
+- **Test in ISC…** (in the banner): runs the transform as it is in the editor, unpushed edits included, on a real identity. It fills your test values with that identity's real data, then shows ISC's answer next to the local one: green when they match, red when they differ. The plugin saves a temporary copy of the transform to run it and deletes it afterwards.
+- **Remembered:** test values and the Test in ISC setup are kept for each transform between sessions.
 
 The JSON side has schema completion and validation while you edit.
 
@@ -53,7 +54,7 @@ The JSON side has schema completion and validation while you edit.
 - IntelliJ IDEA **2026.2 or newer** (build 262+), or another JetBrains IDE of the same version such as PyCharm or WebStorm. The free tier works.
 - An ISC tenant and a **Personal Access Token** (PAT) for a user with the admin rights for what you want to change, such as a source admin or an org admin. Reading the tenant's time zone for the schedule editor needs org admin (`idn:org-configs:read`). Without it, schedule times are shown in UTC.
 - **For transforms:**
-  - **Test in ISC** needs `idn:identity-profile:manage`, which ISC requires for its identity profile preview.
+  - **Test in ISC** needs `idn:identity-profile:manage` for ISC's identity profile preview, `idn:transform:manage` for the temporary copy, and read access to identities and accounts to fill in test values.
   - **The identity attribute dropdown** needs `idn:identity-profile-attribute:read`. Without it, you type the attribute name yourself.
 
 ## Install

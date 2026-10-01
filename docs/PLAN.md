@@ -80,7 +80,9 @@ Source
 
 ### In progress
 - [x] **Transform editor** ([PR #4](https://github.com/kyleburkhardt/sailpoint-isc-intellij-plugin/pull/4)) merged 2026-09-29: a form-first editor with a live local preview, next to the JSON. See "Transform editor" below.
-- [ ] **v0.2.0 release:** `pluginVersion` is bumped on branch `release-0.2.0`. Once that's merged, tag `v0.2.0` on `master` and push the tag.
+- [x] **v0.2.0** released 2026-09-29.
+- [x] **Transform preview and Test in ISC** ([PR #6](https://github.com/kyleburkhardt/sailpoint-isc-intellij-plugin/pull/6)) merged 2026-10-01: every operation previewed, Test in ISC compared with the preview.
+- [ ] **v0.3.0 release:** `pluginVersion` is bumped on branch `release-0.3.0`. Once that's merged, tag `v0.3.0` on `master` and push the tag; `release.yml` builds and publishes it.
 - [ ] **Repo settings suggested but not applied:**
   - Make `build` (and `analyze`) required checks in the ruleset.
   - Turn on **Automatically delete head branches** and **Always suggest updating pull request branches**.
