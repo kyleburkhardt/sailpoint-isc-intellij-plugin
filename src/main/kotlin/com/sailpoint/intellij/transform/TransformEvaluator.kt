@@ -63,9 +63,11 @@ data class EvalContext(
     val accountAttributes: Map<String, Map<String, String>> = emptyMap(),
     /** Attributes of identities referenced by `getReferenceIdentityAttribute`, keyed by its `uid`. */
     val referenceAttributes: Map<String, Map<String, String>> = emptyMap(),
+    /** Tenant values known to be empty, e.g. read from a real identity: they give nothing rather than ask for a value. */
+    val absent: Set<NeededInput> = emptySet(),
     val now: Instant = Instant.now(),
     val random: Random = Random.Default,
-    /** Loads a transform by ID for `reference`, normally from the tenant. */
+    /** Loads a transform by name (what `reference` calls its `id`), normally from the tenant. */
     val resolveTransform: (String) -> JsonObject? = { null },
 )
 
@@ -138,6 +140,9 @@ class TransformEvaluator(private val context: EvalContext) {
         return result
     }
 
+    /** Runs [transform], saved elsewhere and referenced by name, on [input]. */
+    internal fun referenced(transform: JsonObject, input: String?, path: String): EvalResult = eval(transform, input, path)
+
     private fun record(path: String, type: String, input: String?, result: EvalResult) {
         steps += Step(path, type, input, result)
     }
@@ -191,6 +196,10 @@ class OpCall(
 
     fun resolve(element: JsonElement, path: String): EvalResult = evaluator.resolve(element, input, path)
 
+    /** Runs another transform, saved under [name], on the value flowing in here. */
+    fun runReferenced(name: String, transform: JsonObject): EvalResult =
+        evaluator.referenced(transform, input, TransformEvaluator.join(path, "reference($name)"))
+
     /**
      * The operation's extra attributes, which Velocity templates reference as `$name`. Each is resolved the same way
      * as any other value, so a variable can itself be a transform.
@@ -206,17 +215,27 @@ class OpCall(
 
 /**
  * Every tenant value [transform] would read, so the preview can ask for them up front. Duplicates are removed and the
- * order is the order they appear in.
+ * order is the order they appear in. A `reference` is followed into the transform [resolve] finds for it, so what that
+ * reads counts too; one that isn't found is itself something needed.
  */
-fun neededInputs(transform: JsonObject): List<NeededInput> {
+fun neededInputs(transform: JsonObject, resolve: (String) -> JsonObject? = { null }): List<NeededInput> {
     val found = LinkedHashSet<NeededInput>()
+    val followed = HashSet<String>()
     fun walk(element: JsonElement?) {
         when {
             element == null -> Unit
             element.isJsonArray -> element.asJsonArray.forEach(::walk)
             element.isJsonObject -> {
                 val obj = element.asJsonObject
-                needOf(obj)?.let(found::add)
+                val referenced = obj.takeIf { it.string("type") == "reference" }?.attributes()?.string("id")
+                if (referenced != null) {
+                    val target = resolve(referenced)
+                    // Followed once each, so transforms that reference each other don't loop.
+                    if (target == null) found += NeededInput(NeedKind.TRANSFORM, referenced)
+                    else if (followed.add(referenced)) walk(target)
+                } else {
+                    found += needsOf(obj)
+                }
                 obj.entrySet().forEach { (_, child) -> walk(child) }
             }
         }
@@ -282,6 +301,11 @@ private fun readsInput(type: String?): Boolean {
     return op.attribute("input") != null || type == "reference" || type == "rule"
 }
 
+/** The tenant values this node reads. */
+private fun needsOf(node: JsonObject): List<NeededInput> =
+    if (node.string("type") == "displayName") TenantOps.DISPLAY_NAME_PARTS.map { NeededInput(NeedKind.IDENTITY_ATTRIBUTE, it) }
+    else listOfNotNull(needOf(node))
+
 /** The tenant value this node reads, if it reads one. */
 private fun needOf(node: JsonObject): NeededInput? {
     val attributes = node.attributes()
@@ -293,8 +317,8 @@ private fun needOf(node: JsonObject): NeededInput? {
         "getReferenceIdentityAttribute" -> attributes.string("attributeName")?.let {
             NeededInput(NeedKind.REFERENCE_IDENTITY_ATTRIBUTE, it, attributes.string("uid"))
         }
-        "reference" -> attributes.string("id")?.let { NeededInput(NeedKind.TRANSFORM, it) }
-        "rule" -> attributes.string("name")?.let { NeededInput(NeedKind.RULE, it) }
+        // SailPoint's own utility rule is previewed; any other rule only runs in ISC.
+        "rule" -> attributes.string("name")?.takeIf { it != "Cloud Services Deployment Utility" }?.let { NeededInput(NeedKind.RULE, it) }
         else -> null
     }
 }

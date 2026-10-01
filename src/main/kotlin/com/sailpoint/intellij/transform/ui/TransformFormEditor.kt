@@ -2,6 +2,7 @@ package com.sailpoint.intellij.transform.ui
 
 import com.google.gson.JsonParser
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -42,11 +43,14 @@ class TransformFormEditor(private val project: Project, private val file: IscVir
             setUp = { IscTest.setUpAndRun(project, file) },
             current = { IscTest.current(file)?.toString() },
         )
-        val state = IscTest.state(file)
+        val memory = project.service<TransformTestMemory>()
+        val state = IscTest.state(project, file)
         form.showIscOutcome(state.outcome)
         val stopListening = state.listen { form.showIscOutcome(it) }
         Disposer.register(this) { stopListening() }
         load()
+        memory.values(file)?.let(form::restoreTestValues)
+        form.onTestValuesChanged = { memory.remember(file, it) }
         document?.addDocumentListener(
             object : DocumentListener {
                 override fun documentChanged(event: DocumentEvent) {
@@ -109,7 +113,7 @@ class TransformFormEditor(private val project: Project, private val file: IscVir
 
     override fun removePropertyChangeListener(listener: PropertyChangeListener) = Unit
 
-    override fun dispose() = Unit
+    override fun dispose() = form.dispose()
 
     private companion object {
         const val RELOAD_DELAY_MS = 250

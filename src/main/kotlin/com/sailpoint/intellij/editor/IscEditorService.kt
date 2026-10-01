@@ -27,6 +27,7 @@ import com.sailpoint.intellij.api.ResourceKind
 import com.sailpoint.intellij.api.string
 import com.sailpoint.intellij.schedule.EditScheduleDialog
 import com.sailpoint.intellij.transform.TransformCatalog
+import com.sailpoint.intellij.transform.ui.IscTenantNames
 import java.util.concurrent.ConcurrentHashMap
 
 @Service(Service.Level.PROJECT)
@@ -280,6 +281,8 @@ class IscEditorService(private val project: Project) {
                 file.remoteId = file.remoteId ?: if (file.kind.singleton) "" else file.kind.toItem(file.tenantId, json).id.ifEmpty { null }
                 file.remoteId?.let { openFiles[Key(file.tenantId, file.kind, file.owner?.id, it)] = file }
                 if (creating) announce(file.tenantId, file.kind, file.owner?.id)
+                // Previews that reference this transform pick up what was just saved.
+                if (file.kind == ResourceKind.TRANSFORMS) IscTenantNames.of(file.tenantId).transformSaved(json)
                 // ISC normalizes what it stores; show that, unless the user kept typing meanwhile.
                 replaceText(file, text, file.textFor(json))
                 notify("${file.kind.singularName.replaceFirstChar { it.uppercase() }} '${file.objectName}' saved to ${tenant.name}.", NotificationType.INFORMATION)

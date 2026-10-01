@@ -150,10 +150,12 @@ class IscClient {
     }
 
     /**
-     * What [transform] would make identity attribute [attribute] of identity [identityId], worked out by ISC and not
-     * saved. Returns the preview response: `previewAttributes` holds `value`, `previousValue` and `errorMessages`.
+     * What saved transform [transformName] would make identity attribute [attribute] of identity [identityId], worked
+     * out by ISC and not saved. The mapping is a `reference`, as an identity profile's would be: the preview doesn't
+     * take operations inline (it rejects `static` as the type "attribute.static"). Returns the preview response:
+     * `previewAttributes` holds `value`, `previousValue` and `errorMessages`.
      */
-    fun identityPreview(tenantId: String, identityId: String, attribute: String, transform: JsonObject): JsonObject =
+    fun identityPreview(tenantId: String, identityId: String, attribute: String, transformName: String): JsonObject =
         post(
             tenantId,
             "/identity-profiles/v1/identity-preview",
@@ -169,7 +171,10 @@ class IscClient {
                                 add(
                                     JsonObject().apply {
                                         addProperty("identityAttributeName", attribute)
-                                        add("transformDefinition", transform)
+                                        add("transformDefinition", JsonObject().apply {
+                                            addProperty("type", "reference")
+                                            add("attributes", JsonObject().apply { addProperty("id", transformName) })
+                                        })
                                     },
                                 )
                             },
@@ -178,6 +183,25 @@ class IscClient {
                 )
             },
         ).asJsonObject
+
+    /** One identity with its identity attributes (`attributes`) and its manager (`managerRef`). */
+    fun identity(tenantId: String, identityId: String): JsonObject =
+        get(tenantId, "/identities/v1/${encode(identityId)}").asJsonObject
+
+    /** The identity whose alias (its uid, e.g. a username) is [alias], or null when there isn't one. */
+    fun identityByAlias(tenantId: String, alias: String): JsonObject? =
+        get(tenantId, "/identities/v1?limit=1&filters=${encode("alias eq \"${alias.replace("\"", "")}\"")}")
+            .asJsonArray.firstOrNull()?.asJsonObject
+
+    /** The accounts an identity has, each with `sourceName`, `sourceId` and its `attributes`. */
+    fun accountsOf(tenantId: String, identityId: String): List<JsonObject> =
+        get(tenantId, "/accounts/v1?limit=250&filters=${encode("identityId eq \"$identityId\"")}")
+            .asJsonArray.map { it.asJsonObject }
+
+    /** The saved transform named [name] (what a `reference` calls its `id`), or null when there isn't one. */
+    fun transformByName(tenantId: String, name: String): JsonObject? =
+        get(tenantId, "/transforms/v1?limit=1&filters=${encode("name eq \"${name.replace("\"", "")}\"")}")
+            .asJsonArray.firstOrNull()?.takeIf { it.isJsonObject }?.asJsonObject
 
     /** A connector's source configuration, which ISC returns as XML. */
     fun connectorSourceConfig(tenantId: String, scriptName: String): String =
