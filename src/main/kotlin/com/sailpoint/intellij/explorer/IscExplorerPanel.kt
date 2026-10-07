@@ -138,7 +138,13 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
         selectedCategory()?.let { NewProvisioningPolicyDialog(project, it.parent ?: return@action, it.variant == Variants.MACHINE).showAndCreate() }
     }
 
-    private val deleteItem = action("Delete…", AllIcons.General.Remove, { selectedItem()?.kind?.deletable == true }) {
+    private val duplicateTransform = action(
+        "Duplicate…", AllIcons.Actions.Copy, { selectedItem()?.kind == ResourceKind.TRANSFORMS },
+    ) {
+        duplicateTransform()
+    }
+
+    private val deleteItem = action("Delete…", AllIcons.General.Remove, { selectedItem()?.let { it.kind.deletable && !it.readOnly } == true }) {
         deleteSelection()
     }
 
@@ -204,12 +210,13 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
         }
         is ItemData -> listOfNotNull(
             open,
+            duplicateTransform.takeIf { data.item.kind == ResourceKind.TRANSFORMS },
             runGroup.takeIf { data.item.kind == ResourceKind.SOURCES },
             when {
                 data.item.kind == ResourceKind.SOURCES -> deleteSource
                 // Every source needs its account schema, so only entitlement types' schemas can go.
                 data.item.kind == ResourceKind.SOURCE_SCHEMAS -> deleteItem.takeIf { entitlementType(node) != null }
-                !data.item.kind.deletable -> null
+                !data.item.kind.deletable || data.item.readOnly -> null
                 data.item.kind.singleton -> removeConfiguration
                 else -> deleteItem
             },
@@ -526,7 +533,7 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
     /** Deletes the selected object in ISC after confirming; the tree reloads when ISC confirms. */
     private fun deleteSelection() {
         val node = tree.lastSelectedPathComponent as? DefaultMutableTreeNode
-        val item = selectedItem()?.takeIf { it.kind.deletable } ?: return
+        val item = selectedItem()?.takeIf { it.kind.deletable && !it.readOnly } ?: return
         val type = entitlementType(node)
         if (item.kind == ResourceKind.SOURCE_SCHEMAS && type == null) return
         val where = item.parent?.let { " from ${it.kind.singularName} '${it.name}'" }.orEmpty()
@@ -545,6 +552,15 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
         val typeFolder = node.parent as? DefaultMutableTreeNode ?: return null
         val entitlements = (typeFolder.parent as? DefaultMutableTreeNode)?.userObject as? GroupData
         return (typeFolder.userObject as? GroupData)?.name?.takeIf { entitlements?.content == FolderContent.ENTITLEMENTS }
+    }
+
+    /** Offers a copy of the selected transform under a new name, which must differ from its siblings'. */
+    private fun duplicateTransform() {
+        val node = tree.lastSelectedPathComponent as? DefaultMutableTreeNode ?: return
+        val item = (node.userObject as? ItemData)?.item?.takeIf { it.kind == ResourceKind.TRANSFORMS } ?: return
+        val siblings = (node.parent as? DefaultMutableTreeNode)?.childNodes()
+            ?.mapNotNull { (it.userObject as? ItemData)?.item?.name }?.toSet().orEmpty()
+        DuplicateTransformDialog(project, item, siblings).showAndDuplicate()
     }
 
     /** Offers a new entitlement type (schema) on the source whose Entitlements folder is selected. */
@@ -662,7 +678,8 @@ class IscExplorerPanel(private val project: Project) : SimpleToolWindowPanel(tru
                 is ItemData -> {
                     icon = data.item.kind.icon()
                     append(data.item.name)
-                    data.item.detail?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
+                    val detail = listOfNotNull(data.item.detail, "read-only".takeIf { data.item.readOnly }).joinToString(" · ")
+                    if (detail.isNotEmpty()) append("  $detail", SimpleTextAttributes.GRAYED_ATTRIBUTES)
                 }
                 is GroupData -> {
                     icon = AllIcons.Nodes.Folder

@@ -103,7 +103,8 @@ class IscClient {
             if (page.size() < pageSize || added == 0) break
             offset += pageSize
         }
-        return seen.values.sortedBy { it.name.lowercase() }
+        // SailPoint's read-only objects (built-in transforms) go after the tenant's own.
+        return seen.values.sortedWith(compareBy({ it.readOnly }, { it.name.lowercase() }))
     }
 
     fun fetch(tenantId: String, kind: ResourceKind, parentId: String?, id: String): JsonObject =

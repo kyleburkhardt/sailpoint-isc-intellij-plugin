@@ -227,6 +227,32 @@ class IscEditorService(private val project: Project) {
         }
     }
 
+    /**
+     * Creates a copy of [transform] named [name]: ISC's current copy (not unpushed edits in an open editor), with
+     * everything else unchanged. The copy opens once it's created.
+     */
+    fun duplicateTransform(transform: IscItem, name: String) {
+        val kind = ResourceKind.TRANSFORMS
+        background("Duplicating transform ${transform.name} as $name") {
+            val client = service<IscClient>()
+            val copy = client.fetch(transform.tenantId, kind, null, transform.id).deepCopy().apply {
+                remove("id")
+                // SailPoint's own transforms are marked internal; a copy is the tenant's own.
+                remove("internal")
+                addProperty("name", name)
+            }
+            val json = client.post(transform.tenantId, client.collectionPath(kind, null), copy).asJsonObject
+            onEdt {
+                val id = kind.toItem(transform.tenantId, json).id
+                val file = IscVirtualFile(transform.tenantId, kind, null, id, json)
+                openFiles[Key(transform.tenantId, kind, null, id)] = file
+                FileEditorManager.getInstance(project).openFile(file, true)
+                notify("Transform '${transform.name}' duplicated as '$name'.", NotificationType.INFORMATION)
+                announce(transform.tenantId, kind, null)
+            }
+        }
+    }
+
     /** Closes the editors of [source] and of everything that belongs to it, e.g. after it was deleted. */
     fun closeEditorsOf(source: IscItem) {
         val manager = FileEditorManager.getInstance(project)
@@ -250,7 +276,7 @@ class IscEditorService(private val project: Project) {
 
     /** Sends the editor contents to ISC, creating the object if it has no ID yet. */
     fun push(file: IscVirtualFile) {
-        if (!file.kind.editable) return
+        if (!file.editable) return
         val text = documentText(file)
         val body = try {
             requestBody(file, text)
@@ -313,7 +339,9 @@ class IscEditorService(private val project: Project) {
             sourceCode.addProperty("script", text)
         }
         else -> {
-            check(file.kind.editable) { "${file.kind.displayName} are read-only." }
+            check(file.editable) {
+                if (file.isSailPointOwned) "SailPoint's own ${file.kind.displayName.lowercase()} are read-only." else "${file.kind.displayName} are read-only."
+            }
             val json = try {
                 JsonParser.parseString(text)
             } catch (e: JsonSyntaxException) {

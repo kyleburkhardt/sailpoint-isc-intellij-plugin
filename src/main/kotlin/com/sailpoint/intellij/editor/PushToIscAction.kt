@@ -11,7 +11,7 @@ class PushToIscAction : DumbAwareAction() {
 
     override fun update(e: AnActionEvent) {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) as? IscVirtualFile
-        e.presentation.isEnabledAndVisible = e.project != null && file != null && file.kind.editable
+        e.presentation.isEnabledAndVisible = e.project != null && file != null && file.editable
     }
 
     override fun actionPerformed(e: AnActionEvent) {
