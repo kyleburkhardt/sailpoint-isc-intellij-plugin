@@ -84,6 +84,8 @@ class TransformFormEditor(private val project: Project, private val file: IscVir
     }
 
     private fun writeBack() {
+        // A read-only transform (SailPoint's own) can still be tried out on the form; nothing is saved.
+        if (!file.editable) return
         val document = document ?: return
         val text = IscClient.gson.toJson(form.model)
         if (text == document.text) return

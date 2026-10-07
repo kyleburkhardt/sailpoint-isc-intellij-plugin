@@ -8,6 +8,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.EditorNotificationPanel
 import com.intellij.ui.EditorNotificationProvider
 import com.sailpoint.intellij.api.ResourceKind
+import com.sailpoint.intellij.explorer.DuplicateTransformDialog
 import com.sailpoint.intellij.transform.ui.IscTest
 import java.util.function.Function
 import javax.swing.JComponent
@@ -27,6 +28,9 @@ class IscEditorNotificationProvider : EditorNotificationProvider, DumbAware {
                 text = when {
                     where == null -> "The tenant this ${file.kind.singularName} came from is no longer configured"
                     file.remoteId == null -> "New ${file.kind.singularName}, not yet created in $where"
+                    file.isSailPointOwned ->
+                        "SailPoint's own ${file.kind.singularName} '${file.objectName}' from $where is read-only. " +
+                            "Form changes aren't saved; duplicate it to make one you can edit"
                     !file.kind.editable -> "Read-only ${file.kind.singularName} '${file.objectName}' from $where"
                     file.kind == ResourceKind.CONNECTOR_RULES -> "Script of connector rule '${file.objectName}' from $where"
                     else -> "${file.kind.singularName.replaceFirstChar { it.uppercase() }} '${file.objectName}' from $where"
@@ -37,7 +41,12 @@ class IscEditorNotificationProvider : EditorNotificationProvider, DumbAware {
                 if (tenant != null && file.kind == ResourceKind.TRANSFORMS) {
                     createActionLabel("Test in ISC…") { IscTest.setUpAndRun(project, file) }
                 }
-                if (tenant != null && file.kind.editable) {
+                if (tenant != null && file.isSailPointOwned && file.remoteId != null) {
+                    createActionLabel("Duplicate…") {
+                        DuplicateTransformDialog(project, file.kind.toItem(file.tenantId, file.remote), emptySet()).showAndDuplicate()
+                    }
+                }
+                if (tenant != null && file.editable) {
                     createActionLabel(if (file.remoteId == null) "Create in ISC" else "Push to ISC", PushToIscAction.ID)
                 }
                 if (tenant != null && file.remoteId != null) {

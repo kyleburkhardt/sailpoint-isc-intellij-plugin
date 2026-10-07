@@ -124,6 +124,7 @@ enum class ResourceKind(
             SOURCE_CORRELATION -> null
         },
         parent = parent,
+        readOnly = this == TRANSFORMS && json.get("internal")?.takeIf { it.isJsonPrimitive }?.asBoolean == true,
     )
 }
 
@@ -135,6 +136,8 @@ data class IscItem(
     val detail: String?,
     /** The object this one belongs to, for kinds with a [ResourceKind.parent]. */
     val parent: IscItem? = null,
+    /** SailPoint's own objects, e.g. its built-in transforms: they can be read and copied, not changed or deleted. */
+    val readOnly: Boolean = false,
 )
 
 /** Folders that group a source's children in the explorer. */

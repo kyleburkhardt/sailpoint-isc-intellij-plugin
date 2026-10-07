@@ -2,7 +2,7 @@
 
 This file carries the full plan, the decisions behind it and where things stand, so work can resume from here without any earlier conversation. Keep it current: tick items off, and add decisions when they're made.
 
-_Last updated: 2026-09-29._
+_Last updated: 2026-10-07._
 
 ## Conventions and decisions (don't reopen these)
 
@@ -68,6 +68,8 @@ Source
 - [x] Aggregation schedules: New, Edit Schedule builder (tenant time zone ↔ UTC cron), delete.
 - [x] **Phase 1:** tree reloads after create and delete; "None" in empty folders; configs that return 404 open a starter (PUT-saved configs) or explain that they can't be created (the patch-only approvals); deletes for transforms, connector rules and schedules; Remove Configuration for native change detection.
 - [x] **Phase 2:** the Run submenu on sources (aggregate accounts or entitlements, including from a CSV for delimited-file sources, process uncorrelated accounts, test connection or configuration, ping cluster, peek resource objects, synchronize attributes) with background task tracking.
+- [x] **Duplicate…** on a transform (2026-10-06): asks for a new name (it must differ from the tenant's other transforms), then POSTs ISC's current copy without `id` and `internal`, and opens it. Not yet tried on a live tenant.
+- [x] **SailPoint's own transforms** (`internal: true`) are listed after the tenant's own, marked "read-only", and can't be pushed or deleted. The editor is read-only; the form can still be tried out, but nothing is saved, and the banner offers Duplicate….
 - [x] New Source step 1: server-side connector search; Next currently opens the connector's JSON and source-config XML read-only.
 - [x] Repo, README, Build workflow, Release workflow with the Pages update feed, CodeQL workflow.
 

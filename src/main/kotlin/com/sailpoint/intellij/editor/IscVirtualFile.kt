@@ -37,8 +37,14 @@ class IscVirtualFile(
 
     val tenant: IscTenant? get() = service<IscSettings>().findTenant(tenantId)
 
+    /** SailPoint's own object (a built-in transform), which can't be changed. */
+    val isSailPointOwned: Boolean get() = kind.toItem(tenantId, remote, owner).readOnly
+
+    /** Whether edits can be pushed: the kind is editable and the object isn't SailPoint's own. */
+    val editable: Boolean get() = kind.editable && !isSailPointOwned
+
     init {
-        isWritable = kind.editable
+        isWritable = editable
     }
 
     fun textFor(json: JsonObject): String = textFor(kind, json)
