@@ -6,7 +6,7 @@
     Work with SailPoint Identity Security Cloud from the IDE.
     <ul>
       <li>Connect to any number of tenants and browse their sources, transforms, connector rules and identities in the <b>SailPoint</b> tool window</li>
-      <li>Build transforms on a form next to their JSON, with every operation previewed live for your own test values, and <b>Test in ISC</b> to run them on a real identity and compare ISC's answer with the preview</li>
+      <li>Build transforms on a form next to their JSON, with every operation previewed live for your own test values, and <b>Test in ISC</b> to run them on a real identity and compare ISC's answer with the preview. <b>Duplicate</b> any transform, including SailPoint's built-in ones, which stay read-only</li>
       <li>Edit sources and their schemas, provisioning policies, aggregation schedules, correlation config, attribute sync, native change detection and deletion approvals as JSON and push them back to your tenant</li>
       <li>Edit connector rule scripts and push them back to your tenant</li>
     </ul>

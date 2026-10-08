@@ -31,7 +31,7 @@ Active Directory
 
 Right-click for what fits each item:
 
-- **Create:** new transforms, provisioning policies (human or machine account), aggregation schedules, and entitlement types (**New Entitlement Type…** on Entitlements).
+- **Create:** new transforms (or copies with **Duplicate…**), provisioning policies (human or machine account), aggregation schedules, and entitlement types (**New Entitlement Type…** on Entitlements).
 - **Delete:** transforms, connector rules, provisioning policies, schedules and entitlement types, and **Remove Configuration** for native change detection. **Delete Source…** first lists what still uses the source (identity profiles, transforms, apps…) and asks you to type its name.
 - **Run** (on a source): aggregate accounts or entitlements (also from a CSV file for delimited-file sources), process uncorrelated accounts, test the connection or configuration, ping the cluster, peek at raw resource objects, synchronize attributes, upload a connector file (such as a JDBC driver), and **Remove All Accounts…** (confirmed by typing the source's name). Long-running tasks show progress and report their outcome when they finish.
 - **Edit Schedule…** (in a schedule's banner): build aggregation schedules by picking days and times, without writing cron. The plugin converts between the tenant's time zone and the UTC cron that ISC stores, and you can still edit the cron directly.
@@ -46,6 +46,8 @@ A transform opens on a form, with its JSON beside it. Both edit the same documen
 - **Local preview:** runs in the plugin and covers every documented operation, including dates, padding, phone numbers (E.164), country and language codes, and transforms you reference by name, which are loaded from your tenant. Custom rules only run in ISC, and the username generator shows the first name it would try, since only ISC can check whether it's taken.
 - **Test in ISC…** (in the banner): runs the transform as it is in the editor, unpushed edits included, on a real identity. It fills your test values with that identity's real data, then shows ISC's answer next to the local one: green when they match, red when they differ. The plugin saves a temporary copy of the transform to run it and deletes it afterwards.
 - **Remembered:** test values and the Test in ISC setup are kept for each transform between sessions.
+- **Duplicate…** (right-click a transform): makes a copy under a new name, which must differ from your other transforms, and opens it.
+- **SailPoint's own transforms** are listed after yours and are read-only: they can't be pushed or deleted. You can still open them, read their steps and try them out on the form, but nothing is saved. Duplicate one to make a version you can edit.
 
 The JSON side has schema completion and validation while you edit.
 
