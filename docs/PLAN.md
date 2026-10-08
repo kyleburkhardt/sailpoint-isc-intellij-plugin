@@ -2,7 +2,7 @@
 
 This file carries the full plan, the decisions behind it and where things stand, so work can resume from here without any earlier conversation. Keep it current: tick items off, and add decisions when they're made.
 
-_Last updated: 2026-10-07._
+_Last updated: 2026-10-08._
 
 ## Conventions and decisions (don't reopen these)
 
@@ -84,7 +84,9 @@ Source
 - [x] **Transform editor** ([PR #4](https://github.com/kyleburkhardt/sailpoint-isc-intellij-plugin/pull/4)) merged 2026-09-29: a form-first editor with a live local preview, next to the JSON. See "Transform editor" below.
 - [x] **v0.2.0** released 2026-09-29.
 - [x] **Transform preview and Test in ISC** ([PR #6](https://github.com/kyleburkhardt/sailpoint-isc-intellij-plugin/pull/6)) merged 2026-10-01: every operation previewed, Test in ISC compared with the preview.
-- [ ] **v0.3.0 release:** `pluginVersion` is bumped on branch `release-0.3.0`. Once that's merged, tag `v0.3.0` on `master` and push the tag; `release.yml` builds and publishes it.
+- [x] **v0.3.0** released (tag `v0.3.0` on the PR #7 merge).
+- [x] **Duplicate and read-only SailPoint transforms** ([PR #8](https://github.com/kyleburkhardt/sailpoint-isc-intellij-plugin/pull/8)) merged 2026-10-07.
+- [ ] **v0.3.1 release:** `pluginVersion` is bumped on branch `release-0.3.1`. Once that's merged, tag `v0.3.1` on `master` and push the tag; `release.yml` builds and publishes it.
 - [ ] **Repo settings suggested but not applied:**
   - Make `build` (and `analyze`) required checks in the ruleset.
   - Turn on **Automatically delete head branches** and **Always suggest updating pull request branches**.
